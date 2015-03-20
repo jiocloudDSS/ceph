@@ -632,6 +632,23 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
     goto done;
   }
 
+  req->log(s, "init permissions");
+  ret = handler->init_permissions();
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  if (op->supports_website()) {
+    req->log(s, "recalculating target");
+    ret = handler->retarget(op, &op);
+    if (ret < 0) {
+      abort_early(s, op, ret);
+      goto done;
+    }
+    req->op = op;
+  }
+
   // This reads the ACL on the bucket or object
   req->log(s, "reading permissions");
   ret = handler->read_permissions(op);

@@ -110,6 +110,9 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
 
   virtual uint32_t op_mask() { return 0; }
+  virtual bool supports_website() {
+    return false;
+  }
 };
 
 class RGWGetObj : public RGWOp {
@@ -176,6 +179,10 @@ public:
   virtual const string name() { return "get_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual bool need_object_expiration() { return false; }
+  virtual bool supports_website() {
+    return true;
+  }
 };
 
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
@@ -207,6 +214,9 @@ public:
   virtual const string name() { return "list_buckets"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_BUCKETS; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual bool supports_website() {
+    return true;
+  }
 };
 
 class RGWStatAccount : public RGWOp {
@@ -1021,6 +1031,7 @@ protected:
   RGWRados *store;
   struct req_state *s;
 
+  int do_init_permissions();
   int do_read_permissions(RGWOp *op, bool only_bucket);
 
   virtual RGWOp *op_get() { return NULL; }
@@ -1038,6 +1049,13 @@ public:
   virtual int validate_bucket_name(const string& bucket, int name_strictness) { return 0; }
   virtual RGWOp *get_op(RGWRados *store);
   virtual void put_op(RGWOp *op);
+  virtual int init_permissions() {
+    return 0;
+  }
+  virtual int retarget(RGWOp *op, RGWOp **new_op) {
+    *new_op = op;
+    return 0;
+  }
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
 };
