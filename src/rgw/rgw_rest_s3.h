@@ -425,6 +425,10 @@ public:
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  virtual int retarget(RGWOp *op, RGWOp **new_op) {
+    *new_op = op;
+    return 0;
+  }
 };
 
 class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {
@@ -485,8 +489,12 @@ public:
 };
 
 class RGWRESTMgr_S3 : public RGWRESTMgr {
+private:
+  bool enable_s3website;
+protected:
+  bool is_s3website_mode(struct req_state *s);
 public:
-  RGWRESTMgr_S3() {}
+  RGWRESTMgr_S3(bool enable_s3website) : enable_s3website(false) { this->enable_s3website = enable_s3website; }
   virtual ~RGWRESTMgr_S3() {}
 
   virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri) {
@@ -606,4 +614,6 @@ class dss_endpoint {
         dss_endpoint() { }
         ~dss_endpoint() { }
 };
+class RGWHandler_ObjStore_Obj_S3Website;
+
 #endif
