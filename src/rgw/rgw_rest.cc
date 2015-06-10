@@ -164,7 +164,9 @@ string camelcase_dash_http_attr(const string& orig)
   return string(buf);
 }
 
-static list<string> hostnames_list;
+/* avoid duplicate hostnames in hostnames lists */
+static set<string> hostnames_set;
+static set<string> hostnames_s3website_set;
 
 void rgw_rest_init(CephContext *cct, RGWRegion& region)
 {
@@ -199,15 +201,26 @@ void rgw_rest_init(CephContext *cct, RGWRegion& region)
   /* avoid duplicate hostnames in hostnames list */
   map<string, bool> hostnames_map;
   if (!cct->_conf->rgw_dns_name.empty()) {
-    hostnames_map[cct->_conf->rgw_dns_name] = true;
+    hostnames_set.insert(cct->_conf->rgw_dns_name);
   }
-  for (list<string>::iterator iter = region.hostnames.begin(); iter != region.hostnames.end(); ++iter) {
-    hostnames_map[*iter] = true;
-  }
+  hostnames_set.insert(region.hostnames.begin(),  region.hostnames.end());
+  /* TODO: We should have a sanity check that no hostname matches the end of
+   * any other hostname, otherwise we will get ambigious results from
+   * rgw_find_host_in_domains.
+   * Eg: 
+   * Hostnames: [A, B.A]
+   * Inputs: [Z.A, X.B.A]
+   * Z.A clearly splits to subdomain=Z, domain=Z
+   * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
+   */
 
-  for (map<string, bool>::iterator iter = hostnames_map.begin(); iter != hostnames_map.end(); ++iter) {
-    hostnames_list.push_back(iter->first);
+  if(!cct->_conf->rgw_dns_s3website_name.empty()) {
+	  hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
   }
+  hostnames_s3website_set.insert(region.hostnames_s3website.begin(), region.hostnames_s3website.end());
+  /* TODO: we should repeat the hostnames_set sanity check here
+   * and ALSO decide about overlap, if any
+   */
 }
 
 static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
