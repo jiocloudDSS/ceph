@@ -124,7 +124,7 @@ public:
     return false;
   }
 
-  virtual int error_handler(int err_no, string error_content);
+  virtual int error_handler(int err_no, string *error_content);
 };
 
 class RGWGetObj : public RGWOp {
@@ -194,6 +194,18 @@ public:
   virtual bool need_object_expiration() { return false; }
   virtual bool supports_website() {
     return true;
+  }
+};
+
+class RGWGetObj_CB : public RGWGetDataCB
+{
+  RGWGetObj *op;
+public:
+  RGWGetObj_CB(RGWGetObj *_op) : op(_op) {}
+  virtual ~RGWGetObj_CB() {}
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+    return op->get_data_cb(bl, bl_ofs, bl_len);
   }
 };
 
@@ -1121,7 +1133,7 @@ public:
   }
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
-  virtual int error_handler(int err_no, string error_content);
+  virtual int error_handler(int err_no, string *error_content);
 };
 
 #endif
