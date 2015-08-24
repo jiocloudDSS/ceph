@@ -18,6 +18,7 @@
 #include <boost/shared_ptr.hpp>
 #include "include/rbd/librbd.hpp"
 #include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "rbd_replay/ActionTypes.h"
 #include "rbd_loc.hpp"
 #include <iostream>
@@ -141,7 +142,7 @@ public:
 
   virtual std::ostream& dump(std::ostream& o) const {
     o << get_action_name() << ": ";
-    ceph::JSONFormatter formatter(false);
+    JSONFormatter formatter(false);
     formatter.open_object_section("");
     m_action.dump(&formatter);
     formatter.close_section();
