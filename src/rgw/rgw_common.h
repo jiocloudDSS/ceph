@@ -98,11 +98,8 @@ using ceph::crypto::MD5;
 
 #define RGW_REST_SWIFT          0x1
 #define RGW_REST_SWIFT_AUTH     0x2
-
-#define RGW_PROTO_SWIFT          0x1
-#define RGW_PROTO_SWIFT_AUTH     0x2
-#define RGW_PROTO_S3             0x4
-#define RGW_PROTO_WEBSITE     0x8
+#define RGW_REST_S3             0x4
+#define RGW_REST_WEBSITE     0x8
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
