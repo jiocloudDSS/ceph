@@ -423,7 +423,7 @@ static int rgw_build_bucket_policies(RGWRados *store, struct req_state *s)
     }
   }
 
-  return 0;
+  return ret;
 }
 
 /**
