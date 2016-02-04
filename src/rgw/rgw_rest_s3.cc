@@ -2324,19 +2324,19 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(const string& auth_id,
   /* send request */
   int ret = process("POST", keystone_url.c_str());
   if (ret < 0) {
-    dout(2) << "s3 keystone: token validation ERROR: " << rx_buffer.c_str() << dendl;
+    dout(2) << "DSS keystone: signature validation ERROR: " << rx_buffer.c_str() << dendl;
     return -EPERM;
   }
 
   /* now parse response */
   if (response.parse(cct, rx_buffer) < 0) {
-    dout(2) << "s3 keystone: token parsing failed" << dendl;
+    dout(2) << "DSS keystone:  signature response parsing failed" << dendl;
     return -EPERM;
   }
   dout(0) << "DSS INFO: Printing RX buffer: " << rx_buffer.c_str() << dendl;
 
   /* everything seems fine, continue with this user */
-  ldout(cct, 5) << "s3 keystone: validated token: "
+  ldout(cct, 5) << "DSS keystone: validated signature: "
                 << response.token.tenant.name << ":"
                 << response.user.name << " expires: "
                 << response.token.expires << dendl;
