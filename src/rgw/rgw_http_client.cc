@@ -111,7 +111,6 @@ int RGWHTTPClient::process(const char *method, const char *url)
     dout(0) << "curl_easy_performed returned error: " << error_buf << dendl;
     ret = -EINVAL;
   }
-  dout(0) << "============ Status was: " << status << dendl; //<<<<<<
   curl_easy_cleanup(curl_handle);
   curl_slist_free_all(h);
 
