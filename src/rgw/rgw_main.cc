@@ -649,7 +649,8 @@ done:
   int http_ret = s->err.http_ret;
 
   req->log_format(s, "http status=%d", http_ret);
-
+  req->log_format(s, "completing request for trans_id = %s", s->trans_id.c_str());
+  
   if (handler)
     handler->put_op(op);
   rest->put_handler(handler);
