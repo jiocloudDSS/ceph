@@ -1463,6 +1463,9 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   }
 
   url_decode(s->info.request_uri, s->decoded_uri);
+  if (s->decoded_uri.empty()) {
+	dout(0) << "DSS ERROR:: decoded_uri is empty, thus there might be error in decoding because of invalid request_uri"<< dendl;
+  }
 
   /* FastCGI specification, section 6.3
    * http://www.fastcgi.com/devkit/doc/fcgi-spec.html#S6.3

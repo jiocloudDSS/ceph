@@ -2122,8 +2122,9 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
   }
   if (!s->copy_source)
     return new RGWPutObj_ObjStore_S3;
-  else
+  else 
     return new RGWCopyObj_ObjStore_S3;
+  
 }
 
 RGWOp *RGWHandler_ObjStore_Obj_S3::op_delete()
@@ -2996,12 +2997,18 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
   if (ret < 0)
     return NULL;
 
-  if (s->bucket_name_str.empty())
+  if (s->bucket_name_str.empty()) {
+     dout(20) << "DSS INFO:: Returning objstore_Service_S3 handler when bucket is empty" << dendl;
+    
     return new RGWHandler_ObjStore_Service_S3;
+  }
 
-  if (s->object.empty())
+  if (s->object.empty()) {
+     dout(20) << "DSS INFO:: Returning objstore_Bucket_S3 handler when bucket is not empty but object is empty" << dendl;
+
     return new RGWHandler_ObjStore_Bucket_S3;
-
+  }
+     dout(20) << "DSS INFO:: Returning objstore_Obj_S3 handler when both bucket and object are not empty" << dendl;
   return new RGWHandler_ObjStore_Obj_S3;
 }
 

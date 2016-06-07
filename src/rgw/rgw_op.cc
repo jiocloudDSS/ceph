@@ -1267,6 +1267,7 @@ int RGWCreateBucket::verify_permission()
 	
     }
     if (m.size() >= s->user.max_buckets) {
+      dout(5) << "DSS ERROR: number of buckets already present="<< m.size()<<" while allowed buckets="<<s->user.max_buckets<<dendl;
       return -ERR_TOO_MANY_BUCKETS;
     }
   }
