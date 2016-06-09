@@ -146,6 +146,7 @@ using ceph::crypto::MD5;
 #define ERR_SIGNATURE_NO_MATCH   2027
 #define ERR_INVALID_ACCESS_KEY   2028
 #define ERR_BUCKET_ALREADY_OWNED 2029
+#define ERR_BAD_RENAME_REQ       2030
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -943,6 +944,11 @@ struct rgw_obj_key {
   void transform(cls_rgw_obj_key *k) {
     k->name = name;
     k->instance = instance;
+  }
+
+  void dss_duplicate(rgw_obj_key* k) {
+    name = k->name;
+    instance = k->instance;
   }
 
   void set(const string& n) {
