@@ -69,6 +69,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
+#define RGW_ATTR_RENAME_MUTEX   RGW_ATTR_PREFIX "rename_mutex"
 
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
@@ -146,6 +147,15 @@ using ceph::crypto::MD5;
 #define ERR_SIGNATURE_NO_MATCH   2027
 #define ERR_INVALID_ACCESS_KEY   2028
 #define ERR_BUCKET_ALREADY_OWNED 2029
+#define ERR_BAD_RENAME_REQ       2030
+#define ERR_RENAME_NOT_ENABLED   2031
+#define ERR_RENAME_FAILED        2032
+#define ERR_RENAME_DATA_LOST     2033
+#define ERR_RENAME_COPY_FAILED   2034
+#define ERR_RENAME_NEW_OBJ_DEL_FAILED     2035
+#define ERR_RENAME_FAULT_INJ     2036
+#define ERR_RENAME_OBJ_EXISTS    2037
+#define ERR_RENAME_RUNNING       2038
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -943,6 +953,11 @@ struct rgw_obj_key {
   void transform(cls_rgw_obj_key *k) {
     k->name = name;
     k->instance = instance;
+  }
+
+  void dss_duplicate(rgw_obj_key* k) {
+    name = k->name;
+    instance = k->instance;
   }
 
   void set(const string& n) {

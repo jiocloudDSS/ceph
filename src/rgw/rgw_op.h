@@ -25,6 +25,8 @@
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 
+#define RENAME_OP_TESTING_FAULTS 1
+
 using namespace std;
 
 struct req_state;
@@ -87,7 +89,9 @@ public:
 
     return 0;
   }
-
+  req_state* get_request_state() {
+    return s;
+  }
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
     this->store = store;
     this->s = s;
@@ -566,15 +570,26 @@ public:
 };
 
 class RGWRenameObj : public RGWOp {
-    //<<<<
     public:
-      RGWRenameObj() {}
+      int ret;
+      RGWRenameObj() : ret(0) {}
       ~RGWRenameObj() {}
-      int verify_permission() { return 0; }
-      void pre_exec() { int x; }
-      void execute() { int x; }
-      const string name() { return "Rename_obj"; }
+      int verify_permission();
+      void pre_exec();
+      void execute();
+      void perform_external_op(RGWOp*);
+      void delete_rgw_object(RGWOp*);
+      int check_obj(rgw_obj_key&);
+      int set_obj_atomic(bool);
+      virtual const string name() { return "Rename_obj"; }
+#ifdef RENAME_OP_TESTING_FAULTS
+      bool fail_copy();
+      bool fail_parse();
+      bool fail_delete();
+      int getsRandInt();
+#endif
 };
+static int get_rename_obj_atomicity(req_state*, RGWRados*, bool&);
 
 class RGWCopyObj : public RGWOp {
 protected:
