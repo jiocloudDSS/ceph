@@ -565,6 +565,17 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
+class RGWRenameObj : public RGWOp {
+    public:
+      int ret;
+      RGWRenameObj() : ret(0) {}
+      ~RGWRenameObj() {}
+      int verify_permission();
+      void pre_exec();
+      void execute();
+      virtual const string name() { return "Rename_obj"; }
+};
+
 class RGWCopyObj : public RGWOp {
 protected:
   RGWAccessControlPolicy dest_policy;
