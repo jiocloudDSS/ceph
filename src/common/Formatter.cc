@@ -18,6 +18,7 @@
 
 #include "assert.h"
 #include "Formatter.h"
+#include "HTMLFormatter.h"
 #include "common/escape.h"
 
 #include <iostream>
@@ -336,6 +337,24 @@ void XMLFormatter::reset()
   m_pending_string.str("");
   m_sections.clear();
   m_pending_string_name.clear();
+  m_header_done = false;
+}
+
+void XMLFormatter::output_header()
+{
+  if(!m_header_done) {
+    m_header_done = true;
+    write_raw_data(XMLFormatter::XML_1_DTD);;
+    if (m_pretty)
+      m_ss << "\n";
+  }
+}
+
+void XMLFormatter::output_footer()
+{
+  while(!m_sections.empty()) {
+    close_section();
+  }
 }
 
 void XMLFormatter::open_object_section(const char *name)
