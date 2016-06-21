@@ -44,6 +44,11 @@ static struct rgw_http_attr rgw_to_http_attr_list[] = {
   { RGW_ATTR_CONTENT_ENC, "Content-Encoding"},
   { RGW_ATTR_USER_MANIFEST, "X-Object-Manifest"},
   { RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION, "Location"},
+  /* RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION header depends on access mode:
+   * S3 endpoint: x-amz-website-redirect-location
+   * S3Website endpoint: Location
+   */
+  { RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION, "x-amz-website-redirect-location" },
   { NULL, NULL},
 };
 
