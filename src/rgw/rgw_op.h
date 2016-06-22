@@ -87,7 +87,9 @@ public:
 
     return 0;
   }
-
+  req_state* get_request_state() {
+    return s;
+  }
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
     this->store = store;
     this->s = s;
@@ -563,6 +565,18 @@ public:
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+};
+
+class RGWRenameObj : public RGWOp {
+    public:
+      int ret;
+      RGWRenameObj() : ret(0) {}
+      ~RGWRenameObj() {}
+      int verify_permission();
+      void pre_exec();
+      void execute();
+      void perform_external_op(RGWOp*);
+      virtual const string name() { return "Rename_obj"; }
 };
 
 class RGWCopyObj : public RGWOp {
