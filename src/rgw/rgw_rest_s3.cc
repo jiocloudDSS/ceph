@@ -1238,7 +1238,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
                 return -EACCES;
             }
             user_info.user_id = keystone_validator.response.token.tenant.id;
-            user_info.display_name = keystone_validator.response.token.tenant.id; //<<<<<< DSS needs tenant.name
+            user_info.display_name = keystone_validator.response.token.tenant.id;
             /* try to store user if it not already exists */
             if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, user_info) < 0) {
                 int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
@@ -1468,7 +1468,6 @@ done:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
   int r = ret;
@@ -1617,6 +1616,16 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(RGWRados *store, struct req_st
   s3policy.to_xml(ss);
 
   return 0;
+}
+
+void RGWRenameObj_ObjStore_S3::send_response()
+{
+  ret = s->err.ret;
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
 }
 
 void RGWPutACLs_ObjStore_S3::send_response()
@@ -2120,6 +2129,9 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   }
+  if (store->ctx()->_conf->rgw_enable_rename_op && is_rename_op()) {
+    return new RGWRenameObj_ObjStore_S3;
+  }
   if (!s->copy_source)
     return new RGWPutObj_ObjStore_S3;
   else
@@ -2397,7 +2409,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_request(const string& action,
                    || is_url_token
                    || is_infini_url_token);
 
-  /* Infinite URLs should only be used for GET <<<<<< Needs discussion */
+  /* Infinite URLs should only be used for GET */
   if (is_infini_url_token && !(
         (localAction.compare("ListBucket") == 0) ||
         (localAction.compare("GetObject") == 0)  ||
@@ -2728,6 +2740,20 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       return -EPERM;
   }
 
+  // Block rename op for illegal cases
+  if (s->info.args.exists("newname")) {
+      if (!(store->ctx()->_conf->rgw_enable_rename_op)) {
+          return -ERR_RENAME_NOT_ENABLED;
+      }
+      if (s->op == OP_PUT) {
+          if ((s->object).name.empty()) {
+              return -ERR_BAD_RENAME_REQ;
+          }
+      } else {
+          return -ERR_BAD_RENAME_REQ;
+      }
+  }
+
   /* neither keystone and rados enabled; warn and exit! */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados
       && !store->ctx()->_conf->rgw_s3_auth_use_keystone) {
@@ -2757,10 +2783,9 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
               qsr = true;
           } else {
               /* anonymous access */
-              //<<<<<< You will hit here for sign based req
-              //<<<<<< Add changes for anonymous access. Call a func from here.
-              init_anon_user(s);
-              return 0;
+              return -EPERM;
+              //init_anon_user(s);
+              //return 0;
           }
       } else {
           // strncmp returns 0 on match. If even one of AWS or JCS match, dont return -EINVAL.
@@ -2808,7 +2833,11 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       if (s != NULL) {
           resource_object_name = s->object.name;
       }
-      dout(1) << "DSS API LOGGING: Action="<< resource_info.getAction() <<"        Resource="<< resource_info.getResourceName() << "        Tenant=" << resource_info.getTenantName() << "        Object=" << resource_object_name << dendl;
+      dout(1) << "DSS API LOGGING: Action="
+              << resource_info.getAction()
+              << "        Resource="<< resource_info.getResourceName()
+              << "        Tenant=" << resource_info.getTenantName()
+              << "        Object=" << resource_object_name << dendl;
 
       if (isTokenBasedAuth) {
           keystone_result = keystone_validator.validate_request(resource_info.getAction(),
@@ -2826,7 +2855,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
                                                                 "",  /* Received signature */
                                                                 resource_object_name,
                                                                 iamerror);
-        
+
       } else {
           keystone_result = keystone_validator.validate_request(resource_info.getAction(),
                                                                 resource_info.getResourceName(),
