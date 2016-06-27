@@ -351,7 +351,7 @@ void dump_errno(struct req_state *s, int err)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", err);
-  dump_status(s, buf, http_status_names[s->err.http_ret]);
+  dump_status(s, buf, http_status_names[err]);
 }
 
 void dump_string_header(struct req_state *s, const char *name, const char *val)
