@@ -52,7 +52,7 @@ using ceph::crypto::MD5;
 #define RGW_HTTP_RGWX_ATTR_PREFIX "RGWX_ATTR_"
 #define RGW_HTTP_RGWX_ATTR_PREFIX_OUT "Rgwx-Attr-"
 
-#define RGW_AMZ_PREFIX "x-amz-"
+#define RGW_AMZ_PREFIX "x-jcs-"
 #define RGW_AMZ_META_PREFIX RGW_AMZ_PREFIX "x-jcs-meta-"
 #define RGW_AMZ_WEBSITE_REDIRECT_LOCATION RGW_AMZ_PREFIX "website-redirect-location"
 
