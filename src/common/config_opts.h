@@ -1064,6 +1064,7 @@ OPTION(rgw_enable_cors_response_headers, OPT_BOOL, true) // send cors response h
 OPTION(rgw_cors_allowed_origin, OPT_STR, "https://console.jiocloudservices.com, http://console.jiocloudservices.com, http://consolepreprod.jiocloudservices.com, https://consolepreprod.jiocloudservices.com, http://console.staging.jiocloudservices.com, https://console.staging.jiocloudservices.com")// cors allowed domains
 OPTION(rgw_cors_allowed_methods, OPT_STR, "GET, PUT, HEAD, POST, DELETE, COPY, OPTIONS") // cors allowed methods
 OPTION(rgw_cors_allowed_headers, OPT_STR, "X-Auth-Token, Content-Disposition, Content-Type") // cors allowed headers
+OPTION(rgw_cors_exposed_headers, OPT_STR, "ETag") // cors explicitely exposed headers
 OPTION(rgw_cors_content_disposition_header, OPT_STR, "Content-Disposition") // cors content disposition HEADER
 OPTION(rgw_cors_content_disposition_header_value, OPT_STR, "attachment") // cors content disposition HEADER value
 OPTION(rgw_enable_token_based_presigned_url, OPT_BOOL, true) // enable token based presigned url
@@ -1076,6 +1077,7 @@ OPTION(rgw_keystone_token_api, OPT_STR, "v3/token-auth")  // api to validate tok
 OPTION(rgw_keystone_url_token_api, OPT_STR, "url-auth")   // api to validate presigned token URL based authentication requests
 OPTION(rgw_keystone_infinite_url_token_api, OPT_STR, "preauth-token-auth")   // api to validate infinite time presigned token URL
 OPTION(dss_regional_url, OPT_STR, "https://dss.ind-west-1.staging.jiocloudservices.com") // URL to be returned in XMLNS during anonymous list all buckets calls
+OPTION(rgw_enable_rename_op, OPT_BOOL, true)                    // Enable the atomic rename op
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

@@ -3,9 +3,9 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include <sstream>
-
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/mime.h"
@@ -24,7 +24,7 @@
 #include "rgw_multi_del.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
-
+#include "rgw_rest_s3.h"
 #include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -2224,6 +2224,7 @@ void RGWDeleteObj::execute()
 {
   ret = -EINVAL;
   rgw_obj obj(s->bucket, s->object);
+
   if (!s->object.empty()) {
     RGWObjectCtx *obj_ctx = (RGWObjectCtx *)s->obj_ctx;
 
@@ -3512,5 +3513,214 @@ RGWOp *RGWHandler::get_op(RGWRados *store)
 void RGWHandler::put_op(RGWOp *op)
 {
   delete op;
+}
+
+/* Object Rename operation */
+
+int RGWRenameObj::verify_permission()
+{
+    // This function used to check ACLs in legacy code
+    // DSS does not require this.
+    return 0;
+}
+
+void RGWRenameObj::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWRenameObj::execute()
+{
+    ret = 0;
+    s->err.ret = 0;
+    rgw_obj_key orig_object, new_obj;
+    orig_object.dss_duplicate(&(s->object));
+    string copysource;
+    int ret_orig, ret_newobj;
+    RGWCopyObj_ObjStore_S3* copy_op = NULL;
+    RGWDeleteObj_ObjStore_S3* del_op = NULL;
+    RGWDeleteObj_ObjStore_S3* ndel_op = NULL;
+
+    /* Check if the original object exists */
+    ret = check_obj(orig_object);
+    if (ret < 0) {
+        // The passed original object does not exist
+        s->err.ret = ret;
+        return;
+    }
+
+    /* Tweek request params to make this a copy request */
+    (s->object).name = s->info.args.get("newname");
+    ret = check_obj(s->object);
+    if (ret >= 0) {
+        ldout(s->cct, 0) << "DSS ERROR: Target object already exists." << dendl;
+        s->err.http_ret = 403;
+        s->err.ret = -ERR_RENAME_OBJ_EXISTS;
+        return;
+    }
+
+    copysource = s->bucket_name_str;
+    copysource.append("/");
+    copysource.append(orig_object.name);
+    ldout(s->cct, 0) << "DSS INFO: Converting to copy request. s->object: "
+                     << (s->object).name << ". Copy source: " << copysource << dendl;
+    s->info.env->set("HTTP_X_JCS_COPY_SOURCE", copysource.c_str());
+    s->info.env->set("HTTP_X_JCS_METADATA_DIRECTIVE", "COPY");
+    s->copy_source = s->info.env->get("HTTP_X_JCS_COPY_SOURCE");
+    if (s->copy_source) {
+      ret = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
+      if (!ret) { //Surprizingly returns bool
+        ldout(s->cct, 0) << "DSS INFO: Rename op failed to parse copy location" << dendl;
+        s->err.ret = -ERR_RENAME_FAILED;
+        s->err.http_ret = 403;
+        return;
+      }
+    }
+
+    /* Perform copy operation */
+    copy_op = new RGWCopyObj_ObjStore_S3;
+    perform_external_op(copy_op);
+
+    if ((s->err.http_ret != 200) ||
+        (s->err.ret != 0)) {
+        ldout(s->cct, 0) << "DSS ERROR: Copy object failed during rename op."
+                         << " Return status: " << s->err.ret
+                         << " Return HTTP code: " << s->err.http_ret
+                         << dendl;
+        s->err.ret = -ERR_RENAME_FAILED;
+        s->err.http_ret = 403;
+        return;
+    }
+    ldout(s->cct, 0) << "DSS INFO: Rename op: copy done" << dendl;
+
+    /* Tweek the request for a delete obj operation and perform delete op */
+    new_obj.dss_duplicate(&(s->object));
+    (s->object).dss_duplicate(&orig_object);
+    del_op = new RGWDeleteObj_ObjStore_S3;
+    delete_rgw_object(del_op);
+
+    if ((s->err.http_ret != 200) ||
+        (s->err.ret != 0)) {
+        ldout(s->cct, 0) << "DSS ERROR: Delete object failed during rename op. Attempting to revert copy op."
+                         << " Delete object Return status: " << s->err.ret
+                         << " Return HTTP code: " << s->err.http_ret
+                         << dendl;
+
+        /* Revert the copy op */
+        ret_orig = check_obj(s->object);
+        ret_newobj = check_obj(new_obj);
+        if (ret_orig < 0) {
+            // Delete failed but we don't have original object!!
+            if (ret_newobj < 0) {
+                // We are in a soup. Data lost. This is not the case we will ever end up in.
+                ldout(s->cct, 0) << "DSS ERROR: Data lost during rename operation!!" << dendl;
+                s->err.ret = -ERR_RENAME_DATA_LOST;
+                s->err.http_ret = 500;
+            } else {
+                // Everything normal
+                ldout(s->cct, 0) << "DSS INFO: Rename op: Why did we end up here?" << dendl;
+                s->err.http_ret = 200;
+                s->err.ret = 0;
+            }
+        } else {
+            if (ret_newobj >= 0) {
+                // Delete the new object
+                (s->object).dss_duplicate(&new_obj);
+                ndel_op = new RGWDeleteObj_ObjStore_S3;
+                delete_rgw_object(ndel_op);
+
+                if ((s->err.http_ret != 200) ||
+                    (s->err.ret != 0)) {
+                    ldout(s->cct, 0) << "DSS INFO: New object del failed. Status: "
+                                     << s->err.http_ret << " Ret: " << s->err.ret << dendl;
+                    s->err.ret = -ERR_RENAME_NEW_OBJ_DEL_FAILED;
+                    s->err.http_ret = 500;
+                } else {
+                    // Indicate that there has been a failure
+                    ldout(s->cct, 0) << "DSS INFO: Source object delete failed."
+                                     << "Cleaned up destination object to revert to original state." << dendl;
+                    s->err.ret = -ERR_RENAME_FAILED;
+                    s->err.http_ret = 403;
+                }
+            } else {
+                // Log major error. Ask user to file a bug. Why didn't copy fail?
+                ldout(s->cct, 0) << "DSS ERROR: Delete op failure handling: Copy operation did not fail" << dendl;
+                s->err.ret = -ERR_RENAME_COPY_FAILED;
+                s->err.http_ret = 500;
+            }
+        }
+        return;
+    }
+
+    ldout(s->cct, 0) << "DSS INFO: Rename op complete" << dendl;
+    return;
+}
+
+void RGWRenameObj::perform_external_op(RGWOp* bp)
+{
+    bool failure = false;
+    bp->init(store, s, dialect_handler);
+
+    ret = bp->init_processing();
+    if (ret < 0) {
+        failure = true;
+    } else {
+        ret = bp->verify_op_mask();
+    }
+    if (ret < 0) {
+        failure = true;
+    } else {
+        ret = bp->verify_permission();
+    }
+    if (ret < 0) {
+        failure = true;
+    } else {
+        ret = bp->verify_params();
+    }
+    if (ret < 0) {
+        failure = true;
+    }
+
+    if (!failure) {
+        s->system_request = true;
+        bp->pre_exec();
+        bp->execute();
+        s->system_request = false;
+        s->err.ret = bp->get_request_state()->err.ret;
+        s->err.http_ret = bp->get_request_state()->err.http_ret;
+    } else {
+        s->err.ret = ret;
+    }
+    s->err.ret = bp->get_request_state()->err.ret;
+    s->err.http_ret = bp->get_request_state()->err.http_ret;
+}
+
+int RGWRenameObj::check_obj(rgw_obj_key& object)
+{
+    rgw_obj lobj(s->bucket, object);
+    RGWObjectCtx obj_ctx(store);
+    RGWObjState *ros = NULL;
+
+    ret = store->get_obj_state(&obj_ctx, lobj, &ros, NULL);
+    if (ret < 0) {
+        ldout(s->cct, 0) << "DSS ERROR: Failed to fetch obj state" << dendl;
+        return ret;
+    }
+
+    if (!ros->exists) {
+        ldout(s->cct, 0) << "DSS ERROR: The object " << object.name << " does not exist." << dendl;
+        return -ENOENT;
+    }
+    return 0;
+}
+
+void RGWRenameObj::delete_rgw_object(RGWOp* del_op)
+{
+    ldout(s->cct, 0) << "DSS INFO: Deleting object. s->object.name: "
+                     << (s->object).name << dendl;
+    s->err.http_ret = 200;
+    s->err.ret = 0;
+    perform_external_op(del_op);
+    return;
 }
 
