@@ -88,6 +88,68 @@ TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tracing");
  * +--------------------------------------+
  */
 
+int
+encrypt (string in, string out)
+{
+  unsigned char outbuf[OP_SIZE + 1];
+  int olen, tlen, n;
+  unsigned char inbuff[IP_SIZE + 1];
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  //EVP_CIPHER_CTX_init (ctx);
+  EVP_EncryptInit (ctx, EVP_bf_cbc (), key, iv);
+  EVP_CIPHER_CTX_set_padding(ctx,1);
+  int index;
+  index = 0;
+  n = in.length();
+  printf("%d\n", n);
+
+  for (;;)
+    {
+        string str;
+      //printf("hey0\n");
+      if((index + OP_SIZE) <= n)
+      {
+        str = in.substr(index,OP_SIZE);
+        index += OP_SIZE;
+        //printf("hey5\n");
+      }
+      else if (index < n)
+      {
+        str = in.substr(index,n-index);
+        //printf("hey6\n");
+        break;
+      }
+      else
+      {
+        break;
+      }
+      strcpy(inbuff, str.c_str());
+      //printf("hey7\n");
+      bzero (&outbuf, IP_SIZE);
+
+      if (EVP_EncryptUpdate (ctx, outbuf, &olen, inbuff, n) != 1)
+        {
+          printf ("error in encrypt update\n");
+          return 0;
+        }
+
+      if (EVP_EncryptFinal (ctx, outbuf + olen, &tlen) != 1)
+        {
+          printf ("error in encrypt final\n");
+          return 0;
+        }
+      //printf("%d\n", olen);
+      olen += tlen;
+      //printf("%d\n", tlen);
+      out.append(outbuf);
+    }
+    printf("%d\n", olen);
+    cout<<typeid(out).name()<<endl;
+    cout<<out<<endl;
+  //EVP_CIPHER_CTX_cleanup (ctx);
+  return 1;
+}
+
 size_t librados::ObjectOperation::size()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -355,6 +417,8 @@ void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
+  string bufferprinter = "";
+  c.copy(0, c.length(), bufferprinter);
   o->write(off, c);
 }
 

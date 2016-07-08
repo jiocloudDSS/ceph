@@ -277,7 +277,7 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
 }
 
 static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
-                         uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
+                                uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
 {
   RGWRados::SystemObject src(store, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::SystemObject::Read rop(&src);
@@ -329,7 +329,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
       ret = -ENOENT;
 
   } else if (ret == -ENOENT) {
-      ret = -ERR_NO_SUCH_BUCKET;
+    ret = -ERR_NO_SUCH_BUCKET;
   }
 
   return ret;
@@ -357,9 +357,9 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     }
   }
 
-  if(s->dialect.compare("s3") == 0) {
+  if (s->dialect.compare("s3") == 0) {
     s->bucket_acl = new RGWAccessControlPolicy_S3(s->cct);
-  } else if(s->dialect.compare("swift")  == 0) {
+  } else if (s->dialect.compare("swift")  == 0) {
     s->bucket_acl = new RGWAccessControlPolicy_SWIFT(s->cct);
   } else {
     s->bucket_acl = new RGWAccessControlPolicy(s->cct);
@@ -370,7 +370,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     RGWBucketInfo source_info;
 
     ret = store->get_bucket_info(obj_ctx,
-        s->src_tenant_name, s->src_bucket_name, source_info, NULL);
+                                 s->src_tenant_name, s->src_bucket_name, source_info, NULL);
     if (ret == 0) {
       string& region = source_info.region;
       s->local_source = store->region.equals(region);
@@ -418,8 +418,8 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
       if (store->region.is_master && s->op == OP_DELETE && s->system_request) {
         /*If the operation is delete and if this is the master, don't redirect*/
       } else if (!s->local_source ||
-          (s->op != OP_PUT && s->op != OP_COPY) ||
-          s->object.empty()) {
+                 (s->op != OP_PUT && s->op != OP_COPY) ||
+                 s->object.empty()) {
         return -ERR_PERMANENT_REDIRECT;
       }
     }
@@ -593,7 +593,7 @@ static void get_cors_response_headers(RGWCORSRule *rule, const char *req_hdrs, s
   if (req_hdrs) {
     list<string> hl;
     get_str_list(req_hdrs, hl);
-    for(list<string>::iterator it = hl.begin(); it != hl.end(); ++it) {
+    for (list<string>::iterator it = hl.begin(); it != hl.end(); ++it) {
       if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
         dout(5) << "Header " << (*it) << " is not registered in this rule" << dendl;
       } else {
@@ -646,7 +646,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     method = req_meth;
     /* CORS 6.2.5. */
     if (!validate_cors_rule_method(rule, req_meth)) {
-     return false;
+      return false;
     }
   }
 
@@ -730,7 +730,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
                                        rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
                                        uint64_t *ptotal_len,
                                        int (*cb)(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy,
-                                                 off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
+                                           off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
 {
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false;
@@ -760,19 +760,19 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
       uint64_t start_ofs = 0, end_ofs = ent.size;
 
       if (!found_start && cur_total_len + ent.size > (uint64_t)ofs) {
-	start_ofs = ofs - obj_ofs;
-	found_start = true;
+        start_ofs = ofs - obj_ofs;
+        found_start = true;
       }
 
       obj_ofs += ent.size;
 
       if (!found_end && obj_ofs > (uint64_t)end) {
-	end_ofs = end - cur_total_len + 1;
-	found_end = true;
+        end_ofs = end - cur_total_len + 1;
+        found_end = true;
       }
 
       perfcounter->tinc(l_rgw_get_lat,
-                       (ceph_clock_now(cct) - start_time));
+                        (ceph_clock_now(cct) - start_time));
 
       if (found_start) {
         len_count += end_ofs - start_ofs;
@@ -795,7 +795,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 }
 
 static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
-                                       void *param)
+    void *param)
 {
   RGWGetObj *op = static_cast<RGWGetObj *>(param);
   return op->read_user_manifest_part(bucket, ent, bucket_policy, start_ofs, end_ofs);
@@ -903,7 +903,7 @@ bool RGWGetObj::prefetch_data()
   bool prefetch_first_chunk = true;
   range_str = s->info.env->get("HTTP_RANGE");
 
-  if(range_str) {
+  if (range_str) {
     int r = parse_range(range_str, ofs, end, &partial_content);
     /* error on parsing the range, stop prefetch and will fail in execte() */
     if (r < 0) {
@@ -948,6 +948,9 @@ void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
   bufferlist bl;
+  string s;
+  s = bl;
+  printf("this is s\n");
   gc_invalidate_time = ceph_clock_now(s->cct);
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
@@ -1015,7 +1018,7 @@ void RGWGetObj::execute()
   ret = read_op.iterate(ofs, end, &cb);
 
   perfcounter->tinc(l_rgw_get_lat,
-                   (ceph_clock_now(s->cct) - start_time));
+                    (ceph_clock_now(s->cct) - start_time));
   if (ret < 0) {
     goto done_err;
   }
@@ -1447,7 +1450,7 @@ void RGWCreateBucket::execute()
     JSONDecoder::decode_json("bucket_info", master_info, &jp);
     ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
     ldout(s->cct, 20) << "got creation time: << " << master_info.creation_time << dendl;
-    pmaster_bucket= &master_info.bucket;
+    pmaster_bucket = &master_info.bucket;
     creation_time = master_info.creation_time;
     pobjv = &objv;
   } else {
@@ -1582,8 +1585,9 @@ void RGWDeleteBucket::execute()
     JSONParser jp;
     ret = forward_request_to_master(s, &ot.read_version, store, in_data, &jp);
     if (ret < 0) {
-      if (ret == -ENOENT) { /* adjust error,
-                               we want to return with NoSuchBucket and not NoSuchKey */
+      if (ret == -ENOENT) {
+        /* adjust error,
+                                 we want to return with NoSuchBucket and not NoSuchKey */
         ret = -ERR_NO_SUCH_BUCKET;
       }
       return;
@@ -1616,7 +1620,7 @@ protected:
 public:
   bool immutable_head() { return true; }
   RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
+    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
 };
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
@@ -1684,8 +1688,8 @@ static bool is_v2_upload_id(const string& upload_id)
 }
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                                              map<string, bufferlist>& attrs, time_t delete_at,
-                                              const char *if_match, const char *if_nomatch)
+    map<string, bufferlist>& attrs, time_t delete_at,
+    const char *if_match, const char *if_nomatch)
 {
   complete_writing_data();
 
@@ -1861,7 +1865,7 @@ void RGWPutObj::execute()
   ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (ret < 0) {
     ldout(s->cct, 20) << "get_system_versioning_params() returned ret=" \
-        << ret << dendl;
+                      << ret << dendl;
     goto done;
   }
 
@@ -1881,8 +1885,9 @@ void RGWPutObj::execute()
     ldout(s->cct, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
-  if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
-                            we also check sizes at the end anyway */
+  if (!chunked_upload) {
+    /* with chunked upload we don't know how big is the upload.
+                              we also check sizes at the end anyway */
     ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                              user_quota, bucket_quota, s->content_length);
     if (ret < 0) {
@@ -2041,7 +2046,7 @@ void RGWPutObj::execute()
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
-                   (ceph_clock_now(s->cct) - s->time));
+                    (ceph_clock_now(s->cct) - s->time));
 }
 
 int RGWPostObj::verify_permission()
@@ -2106,26 +2111,26 @@ void RGWPostObj::execute()
     goto done;
 
   while (data_pending) {
-     bufferlist data;
-     len = get_data(data);
+    bufferlist data;
+    len = get_data(data);
 
-     if (len < 0) {
-       ret = len;
-       goto done;
-     }
+    if (len < 0) {
+      ret = len;
+      goto done;
+    }
 
-     if (!len)
-       break;
+    if (!len)
+      break;
 
-     ret = put_data_and_throttle(processor, data, ofs, &hash, false);
+    ret = put_data_and_throttle(processor, data, ofs, &hash, false);
 
-     ofs += len;
+    ofs += len;
 
-     if (ofs > max_len) {
-       ret = -ERR_TOO_LARGE;
-       goto done;
-     }
-   }
+    if (ofs > max_len) {
+      ret = -ERR_TOO_LARGE;
+      goto done;
+    }
+  }
 
   if (len < min_len) {
     ret = -ERR_TOO_SMALL;
@@ -2258,8 +2263,8 @@ int RGWPutMetadataAccount::verify_permission()
 }
 
 void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
-                                                const set<string>& rmattr_names,
-                                                map<int, string>& temp_url_keys)
+    const set<string>& rmattr_names,
+    map<int, string>& temp_url_keys)
 {
   map<string, bufferlist>::iterator iter;
 
@@ -2276,7 +2281,7 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
   }
 
   set<string>::const_iterator riter;
-  for(riter = rmattr_names.begin(); riter != rmattr_names.end(); ++riter) {
+  for (riter = rmattr_names.begin(); riter != rmattr_names.end(); ++riter) {
     const string& name = *riter;
 
     if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
@@ -2376,7 +2381,7 @@ void RGWPutMetadataBucket::execute()
   }
 
   ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs,
-          &s->bucket_info.objv_tracker);
+                             &s->bucket_info.objv_tracker);
 }
 
 int RGWPutMetadataObject::verify_permission()
@@ -2695,13 +2700,13 @@ void RGWCopyObj::execute()
                         attrs_mod,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         olh_epoch,
-			delete_at,
+                        delete_at,
                         (version_id.empty() ? NULL : &version_id),
                         &s->req_id, /* use req_id as tag */
                         &etag,
                         &s->err,
                         copy_obj_progress_cb, (void *)this
-                        );
+                       );
 }
 
 int RGWGetACLs::verify_permission()
@@ -2837,7 +2842,7 @@ void RGWPutACLs::execute()
     if (ret < 0)
       return;
   }
-  
+
   attrs[RGW_ATTR_ACL] = bl;
 
   if (!s->object.empty()) {
@@ -2983,16 +2988,16 @@ void RGWOptionsCORS::execute()
   origin = s->info.env->get("HTTP_ORIGIN");
   if (!origin) {
     dout(0) <<
-    "Preflight request without mandatory Origin header"
-    << dendl;
+            "Preflight request without mandatory Origin header"
+            << dendl;
     ret = -EINVAL;
     return;
   }
   req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
   if (!req_meth) {
     dout(0) <<
-    "Preflight request without mandatory Access-control-request-method header"
-    << dendl;
+            "Preflight request without mandatory Access-control-request-method header"
+            << dendl;
     ret = -EINVAL;
     return;
   }
@@ -3220,7 +3225,7 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
       expected_next++;
     }
     if (sorted_omap ||
-      (int)info.num > marker) {
+        (int)info.num > marker) {
       parts[info.num] = info;
       last_num = info.num;
     }
@@ -3617,7 +3622,7 @@ void RGWListBucketMultiparts::execute()
         return;
       }
       prefix = path_args;
-      delimiter="/";
+      delimiter = "/";
     }
   }
   marker_meta = marker.get_meta();
@@ -3702,8 +3707,8 @@ void RGWDeleteMultiObj::execute()
   }
 
   for (iter = multi_delete->objects.begin();
-        iter != multi_delete->objects.end() && num_processed < max_to_delete;
-        ++iter, num_processed++) {
+       iter != multi_delete->objects.end() && num_processed < max_to_delete;
+       ++iter, num_processed++) {
     rgw_obj obj(bucket, *iter);
 
     obj_ctx->set_atomic(obj);
@@ -3757,7 +3762,7 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
   int ret = rgw_build_policies(store, s, only_bucket, op->prefetch_data());
 
   if (ret < 0) {
-    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":" <<s->object << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
+    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":" << s->object << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
   }
@@ -3770,29 +3775,29 @@ RGWOp *RGWHandler::get_op(RGWRados *store)
 {
   RGWOp *op;
   switch (s->op) {
-   case OP_GET:
-     op = op_get();
-     break;
-   case OP_PUT:
-     op = op_put();
-     break;
-   case OP_DELETE:
-     op = op_delete();
-     break;
-   case OP_HEAD:
-     op = op_head();
-     break;
-   case OP_POST:
-     op = op_post();
-     break;
-   case OP_COPY:
-     op = op_copy();
-     break;
-   case OP_OPTIONS:
-     op = op_options();
-     break;
-   default:
-     return NULL;
+  case OP_GET:
+    op = op_get();
+    break;
+  case OP_PUT:
+    op = op_put();
+    break;
+  case OP_DELETE:
+    op = op_delete();
+    break;
+  case OP_HEAD:
+    op = op_head();
+    break;
+  case OP_POST:
+    op = op_post();
+    break;
+  case OP_COPY:
+    op = op_copy();
+    break;
+  case OP_OPTIONS:
+    op = op_options();
+    break;
+  default:
+    return NULL;
   }
 
   if (op) {

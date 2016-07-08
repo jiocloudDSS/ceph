@@ -85,8 +85,8 @@ CephBroker::CephBroker(PropertiesPtr& cfg)
   }
 
   // For Ceph debugging, uncomment these lines
-  //ceph_conf_set(cmount, "debug_client", "1");
-  //ceph_conf_set(cmount, "debug_ms", "1");
+  ceph_conf_set(cmount, "debug_client", "5");
+  ceph_conf_set(cmount, "debug_ms", "5");
 
   HT_INFO("Calling ceph_mount");
   ret = ceph_mount(cmount, m_root_dir.empty() ? NULL : m_root_dir.c_str());
