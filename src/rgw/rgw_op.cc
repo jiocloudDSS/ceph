@@ -3566,10 +3566,12 @@ void RGWRenameObj::execute()
     s->info.env->set("HTTP_X_JCS_COPY_SOURCE", copysource.c_str());
     s->info.env->set("HTTP_X_JCS_METADATA_DIRECTIVE", "COPY");
     s->copy_source = s->info.env->get("HTTP_X_JCS_COPY_SOURCE");
+    ldout(s->cct, 0) << "DSS INFO: The raw copy location to be parsed: " << raw_copy_source <<dendl;
     if (s->copy_source) {
       ret = RGWCopyObj::parse_copy_location(raw_copy_source, s->src_bucket_name, s->src_object);
+      ldout(s->cct, 0) << "DSS INFO: final source key name: " << s->src_object << " and bucket name: " << s->src_bucket_name << dendl;
       if (!ret) { //Surprizingly returns bool
-        ldout(s->cct, 0) << "DSS INFO: Rename op failed to parse copy location" << dendl;
+        ldout(s->cct, 0) << "DSS ERROR: Rename op failed to parse copy location" << dendl;
         s->err.ret = -ERR_RENAME_FAILED;
         s->err.http_ret = 403;
         return;
