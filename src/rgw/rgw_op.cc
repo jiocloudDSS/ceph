@@ -2265,7 +2265,6 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
 
 
   string dec_src;
-
   url_decode(name_str, dec_src);
   const char *src = dec_src.c_str();
 
@@ -3535,7 +3534,7 @@ void RGWRenameObj::execute()
     s->err.ret = 0;
     rgw_obj_key orig_object, new_obj;
     orig_object.dss_duplicate(&(s->object));
-    string copysource;
+    string copysource, raw_copy_source;
     int ret_orig, ret_newobj;
     RGWCopyObj_ObjStore_S3* copy_op = NULL;
     RGWDeleteObj_ObjStore_S3* del_op = NULL;
@@ -3558,7 +3557,7 @@ void RGWRenameObj::execute()
         s->err.ret = -ERR_RENAME_OBJ_EXISTS;
         return;
     }
-
+    raw_copy_source = get_raw_copy_source();
     copysource = s->bucket_name_str;
     copysource.append("/");
     copysource.append(orig_object.name);
@@ -3568,7 +3567,7 @@ void RGWRenameObj::execute()
     s->info.env->set("HTTP_X_JCS_METADATA_DIRECTIVE", "COPY");
     s->copy_source = s->info.env->get("HTTP_X_JCS_COPY_SOURCE");
     if (s->copy_source) {
-      ret = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
+      ret = RGWCopyObj::parse_copy_location(raw_copy_source, s->src_bucket_name, s->src_object);
       if (!ret) { //Surprizingly returns bool
         ldout(s->cct, 0) << "DSS INFO: Rename op failed to parse copy location" << dendl;
         s->err.ret = -ERR_RENAME_FAILED;
@@ -3722,5 +3721,14 @@ void RGWRenameObj::delete_rgw_object(RGWOp* del_op)
     s->err.ret = 0;
     perform_external_op(del_op);
     return;
+}
+
+string RGWRenameObj::get_raw_copy_source()
+{
+    string uri = s->info.request_uri;
+    int start = uri.find('/');
+    int end = uri.find('?');
+    string raw_copy_source = uri.substr(start+1, end);
+    return raw_copy_source;
 }
 
