@@ -3569,7 +3569,7 @@ void RGWRenameObj::execute()
     ldout(s->cct, 0) << "DSS INFO: The raw copy location to be parsed: " << raw_copy_source <<dendl;
     if (s->copy_source) {
       ret = RGWCopyObj::parse_copy_location(raw_copy_source, s->src_bucket_name, s->src_object);
-      ldout(s->cct, 0) << "DSS INFO: final source key name: " << s->src_object << "and bucket name: " << s->src_bucket_name << dendl;
+      ldout(s->cct, 0) << "DSS INFO: final source key name: " << s->src_object << " and bucket name: " << s->src_bucket_name << dendl;
       if (!ret) { //Surprizingly returns bool
         ldout(s->cct, 0) << "DSS ERROR: Rename op failed to parse copy location" << dendl;
         s->err.ret = -ERR_RENAME_FAILED;
