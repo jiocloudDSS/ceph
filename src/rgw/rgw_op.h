@@ -578,6 +578,7 @@ class RGWRenameObj : public RGWOp {
       void perform_external_op(RGWOp*);
       void delete_rgw_object(RGWOp*);
       int check_obj(rgw_obj_key&);
+      string get_raw_copy_source();
       virtual const string name() { return "Rename_obj"; }
 };
 
