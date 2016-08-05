@@ -164,7 +164,7 @@ public:
   int get_params();
   int complete_get_params();
   void send_response();
-  int get_data(bufferlist& bl);
+  int get_data(bufferlist& bl,MD5* hash= NULL);
 };
 
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {

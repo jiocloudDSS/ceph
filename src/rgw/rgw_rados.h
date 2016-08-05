@@ -16,6 +16,10 @@
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_rest_conn.h"
+#include <openssl/conf.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <string.h>
 
 class RGWWatcher;
 class SafeTimer;
@@ -2315,7 +2319,7 @@ protected:
 public:
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_info(_bi) {}
   virtual ~RGWPutObjProcessor() {}
-  virtual int prepare(RGWRados *_store, string *oid_rand) {
+  virtual int prepare(RGWRados *_store, string *oid_rand, char** key = NULL) {
     store = _store;
     return 0;
   }
@@ -2430,7 +2434,7 @@ public:
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
-  int prepare(RGWRados *store, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand, char** key = NULL);
   virtual bool immutable_head() { return false; }
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
@@ -2448,4 +2452,9 @@ public:
   }
 };
 
+int encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *key, unsigned char *iv, unsigned char *ciphertext);
+
+int decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *key,unsigned char *iv, unsigned char *plaintext);
+
+void handleErrors(void);
 #endif

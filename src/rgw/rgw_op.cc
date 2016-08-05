@@ -893,7 +893,7 @@ void RGWGetObj::pre_exec()
 void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
-  bufferlist bl;
+  bufferlist bl,keybl;
   gc_invalidate_time = ceph_clock_now(s->cct);
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
@@ -931,6 +931,11 @@ void RGWGetObj::execute()
   ret = read_op.prepare(&new_ofs, &new_end);
   if (ret < 0)
     goto done_err;
+
+  key = new char[128];
+  keybl = attrs[RGW_ATTR_KEY];
+  keybl.copy(0,keybl.length(),key);
+  ldout(s->cct, 0) << "gbdebug" << key << dendl;
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end()) {
@@ -1524,7 +1529,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand, char** key);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime,
                   map<string, bufferlist>& attrs,
                   const char *if_match = NULL, const char *if_nomatch = NULL);
@@ -1535,7 +1540,7 @@ public:
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand, char** key)
 {
   int r = prepare_init(store, NULL);
   if (r < 0) {
@@ -1564,6 +1569,29 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
     return -EINVAL;
   }
 
+  rgw_obj meta_obj;
+  string meta_oid;
+  map<string, bufferlist> attrs;
+  meta_oid = mp.get_meta();
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = s->object.name;
+  int ret;
+
+  ret = get_obj_attrs(store, s, meta_obj, attrs);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj << " ret=" << ret << dendl;
+    //return;
+  }
+  else {
+    bufferlist keybl = attrs[RGW_ATTR_KEY];
+    if (keybl.length() > 0)
+    {
+      *key = new char[256]; 
+      keybl.copy(0,keybl.length(),*key);
+      ldout(s->cct, 0) << "gbdebug mp key" << *key << dendl;
+    }
+  }
   string upload_prefix = oid + ".";
 
   if (!oid_rand) {
@@ -1741,12 +1769,15 @@ void RGWPutObj::execute()
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
-  bufferlist bl, aclbl;
+  bufferlist bl, aclbl,keybl;
   map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
-  bool multipart;
-
+  bool multipart, is_encrypted = false;
+  int i = 0;
+  bool exists;
+  const char* is_enc; 
+ 
   bool need_calc_md5 = (obj_manifest == NULL);
 
 
@@ -1796,14 +1827,25 @@ void RGWPutObj::execute()
   }
 
   processor = select_processor(*(RGWObjectCtx *)s->obj_ctx, &multipart);
+  is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
+  is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
+  if (!multipart && is_encrypted)
+  {
+    //Get the key from KMS and store it as attribute
+    key = "0123456789012345678901234567890101234567890123456789012345678901";
+    dout(0) << "gbdebug : Normal uploading with key " << key << dendl;
+    keybl.append(key);
+    attrs[RGW_ATTR_KEY] = keybl;
+  }
 
-  ret = processor->prepare(store, NULL);
+  //For multipart, the key gets populated here
+  ret = processor->prepare(store, NULL,&key);
   if (ret < 0)
     goto done;
-
   do {
+    i++;
     bufferlist data;
-    len = get_data(data);
+    len = get_data(data,&hash);
     if (len < 0) {
       ret = len;
       goto done;
@@ -2785,6 +2827,9 @@ void RGWInitMultipart::execute()
   map<string, bufferlist> attrs;
   rgw_obj obj;
   map<string, string>::iterator iter;
+  bool is_encrypted = false;
+  bufferlist keybl;
+  const char* key;
 
   if (get_params() < 0)
     return;
@@ -2795,6 +2840,18 @@ void RGWInitMultipart::execute()
   policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
+
+  const char* is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
+
+  //Get the key from KMS and store it as attribute
+  is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
+  if (is_encrypted)
+  {
+    key = "1023456789012345678901234567890101234567890123456789012345678901";
+    dout(0) << "gbdebug : Yes enc it is wuth key" << key << dendl;
+    keybl.append(key);
+    attrs[RGW_ATTR_KEY] = keybl;
+  }
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {
     bufferlist& attrbl = attrs[iter->first];

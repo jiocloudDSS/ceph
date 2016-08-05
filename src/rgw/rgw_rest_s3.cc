@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <math.h>
 
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
@@ -72,17 +73,87 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
+/* A 256 bit key */
+//extern unsigned char *key; 
+
+/* A 128 bit IV */
+extern unsigned char *iv ;
+
+
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   const char *content_type = NULL;
   string content_type_str;
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
-  bufferlist metadata_bl;
+  bufferlist metadata_bl, decrypted_bl;
+  if (key)
+  {
+    unsigned char* read_data; 
+    char right_part[16]; 
+    int decryptedtext_len,left_data,iter, full_chunks ;
+    char padded[] = "0000000000000000";
+    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    unsigned char decryptedtext[chunk_size];
+    char deficit_char; 
+    if (ret)
+      goto done;
 
-  if (ret)
-    goto done;
+    read_data = reinterpret_cast<unsigned char *>(bl.c_str());
 
+    /* Initialise the library */
+    ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
+    OPENSSL_config(NULL);
+    full_chunks = floor(((double)bl_len)/chunk_size);
+    dout(0) << "gbdebug Total part number " << full_chunks << dendl;
+    for (iter=0; iter < full_chunks  ; iter++)
+    {
+      decryptedtext_len = decrypt(read_data, chunk_size, (unsigned char*)key,iv,decryptedtext);
+      read_data += chunk_size;
+      decrypted_bl.append((char*)decryptedtext, chunk_size);
+      dout(0) << "gbdebug Doing for part number " << iter << dendl;
+    }
+
+    left_data = bl_len % chunk_size;
+    dout(0) << "gbdebug Length of Encrypted text " << bl_len << " and key is " << key << dendl;
+    decryptedtext_len = decrypt(read_data, left_data, (unsigned char*)key,iv,decryptedtext);
+
+    if (left_data > 32)
+    {
+      decrypted_bl.append((char*)decryptedtext, left_data);
+    }
+    else if (left_data == 32)
+    {
+      strncpy(right_part,(char*)decryptedtext + 16, (unsigned)16); 
+      if (!(strncmp(right_part,padded,16)))
+      {
+        decrypted_bl.append((char*)decryptedtext,16);
+        bl_len = bl_len - 16;
+        total_len = total_len - 16;
+        dout(0) << "gbdebug Exact 16 bytes" << bl_len << dendl;
+      }
+      else
+        decrypted_bl.append((char*)decryptedtext,32);
+      decryptedtext[decryptedtext_len] = '\0';
+      dout(0) << "gbdebug Real Decrypted text " << decryptedtext << dendl;
+    }
+    else if (left_data == 16)
+    {
+      deficit_char = decryptedtext[15];
+      unsigned deficit = (deficit_char - '0');
+      bl_len = bl_len - deficit;
+      total_len = total_len - deficit;
+      dout(0) << "gbdebug Not Exact 16 bytes" << deficit << "Deficit" << "And" << bl_len << dendl;
+      decrypted_bl.append((char*)decryptedtext,16 - deficit);
+      decryptedtext[decryptedtext_len] = '\0';
+      dout(0) << "gbdebug Real Decrypted text " << decryptedtext << dendl;
+    }
+
+    EVP_cleanup();
+    ERR_free_strings();
+  }
   if (sent_header)
     goto send_data;
 
@@ -179,7 +250,11 @@ done:
 
 send_data:
   if (get_data && !ret) {
-    int r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
+    int r;
+    if (key)
+      r = s->cio->write(decrypted_bl.c_str() + bl_ofs, bl_len);
+    else
+      r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
   }
@@ -1363,7 +1438,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
   return 0;
 }
 
-int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
+int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl,MD5* hash)
 {
   bool boundary;
   bool done;
