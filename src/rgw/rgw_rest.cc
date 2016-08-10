@@ -913,7 +913,7 @@ int RGWPutObj_ObjStore::get_params()
 //unsigned char *key = (unsigned char *)"0123456789012345678901234567890101234567890123456789012345678901";
 
 /* A 128 bit IV */
-unsigned char *iv = (unsigned char *)"01234567890123456";
+//unsigned char *iv = (unsigned char *)"01234567890123456";
 
 
 
@@ -932,7 +932,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
   int len = 0;
   if (cl) 
   {
-    if (key)
+    if (!key.empty())
     {
       uint64_t buffer_length = cl;
       if (cl == 16)
@@ -979,8 +979,10 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       //int decryptedtext_len;
       int  ciphertext_len;
       /* Encrypt the plaintext */
-      ciphertext_len = encrypt (read_data, read_len, (unsigned char*)key, iv, ciphertext);
-      dout(0) << "gbdebug Encryption done " << ciphertext_len << dendl;
+      const char* c_key = key.c_str();
+      const char* c_iv = iv.c_str();
+      ciphertext_len = encrypt (read_data, read_len, (unsigned char*)c_key, (unsigned char*)c_iv, ciphertext);
+      dout(0) << "gbdebug Encryption done " << ciphertext_len  << " with  key " << c_key <<" and iv " << c_iv << dendl;
 
       /* Do something useful with the ciphertext here */
       //printf("Ciphertext is:\n");

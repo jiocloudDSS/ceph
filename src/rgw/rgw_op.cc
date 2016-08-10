@@ -893,9 +893,12 @@ void RGWGetObj::pre_exec()
 void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
-  bufferlist bl,keybl;
+  bufferlist bl,keybl,ivbl;
   gc_invalidate_time = ceph_clock_now(s->cct);
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+  RGW_KMS req_kms(s->cct);
+  string root_account = s->bucket_owner_id;
+  string key_enc,iv_enc; 
 
   RGWGetObj_CB cb(this);
 
@@ -932,11 +935,17 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done_err;
 
-  key = new char[128];
   keybl = attrs[RGW_ATTR_KEY];
-  keybl.copy(0,keybl.length(),key);
-  ldout(s->cct, 0) << "gbdebug" << key << dendl;
-
+  ivbl = attrs[RGW_ATTR_IV];
+  if (keybl.length())
+  {
+    keybl.copy(0,keybl.length(),key_enc);
+    ivbl.copy(0,ivbl.length(),iv_enc);
+    req_kms.make_kms_decrypt_request(root_account,key_enc, iv_enc,key,iv);
+    dout(0) << "gbdebug decrypted "<< dendl;
+    dout(0)  << key.c_str() << dendl;
+    dout(0) << "gbdebug iv" << iv.c_str() << dendl;
+  }
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end()) {
     ret = handle_user_manifest(attr_iter->second.c_str());
@@ -1529,7 +1538,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, string *oid_rand, char** key);
+  int prepare(RGWRados *store, string *oid_rand, string* key=NULL, string* iv=NULL);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime,
                   map<string, bufferlist>& attrs,
                   const char *if_match = NULL, const char *if_nomatch = NULL);
@@ -1540,7 +1549,7 @@ public:
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand, char** key)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand, string* key, string* iv)
 {
   int r = prepare_init(store, NULL);
   if (r < 0) {
@@ -1584,12 +1593,18 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand, cha
     //return;
   }
   else {
+    RGW_KMS req_kms(s->cct);
+    string root_account = s->bucket_owner_id;
     bufferlist keybl = attrs[RGW_ATTR_KEY];
+    bufferlist ivbl = attrs[RGW_ATTR_IV];
+    string key_enc, iv_enc, key_dec, iv_dec;
     if (keybl.length() > 0)
     {
-      *key = new char[256]; 
-      keybl.copy(0,keybl.length(),*key);
-      ldout(s->cct, 0) << "gbdebug mp key" << *key << dendl;
+      keybl.copy(0,keybl.length(),key_enc);
+      ivbl.copy(0,ivbl.length(),iv_enc);
+      req_kms.make_kms_decrypt_request(root_account,key_enc, iv_enc,key_dec,iv_dec);
+      *key = key_dec;
+      *iv = iv_dec;
     }
   }
   string upload_prefix = oid + ".";
@@ -1769,7 +1784,7 @@ void RGWPutObj::execute()
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
-  bufferlist bl, aclbl,keybl;
+  bufferlist bl, aclbl,keybl,ivbl;
   map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
@@ -1831,15 +1846,20 @@ void RGWPutObj::execute()
   is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
   if (!multipart && is_encrypted)
   {
+    RGW_KMS req_kms(s->cct);
+    string root_account = s->bucket_owner_id;
+    string key_enc,iv_enc; 
+    req_kms.make_kms_encrypt_request(root_account,key_enc, iv_enc,key,iv);
     //Get the key from KMS and store it as attribute
-    key = "0123456789012345678901234567890101234567890123456789012345678901";
-    dout(0) << "gbdebug : Normal uploading with key " << key << dendl;
-    keybl.append(key);
+    dout(0) << "gbdebug : Normal uploading with key " << key << " and " << "iv is " << iv << dendl;
+    keybl.append(key_enc.c_str());
+    ivbl.append(iv_enc.c_str());
     attrs[RGW_ATTR_KEY] = keybl;
+    attrs[RGW_ATTR_IV] = ivbl;
   }
 
   //For multipart, the key gets populated here
-  ret = processor->prepare(store, NULL,&key);
+  ret = processor->prepare(store, NULL,&key,&iv);
   if (ret < 0)
     goto done;
   do {
@@ -2828,8 +2848,8 @@ void RGWInitMultipart::execute()
   rgw_obj obj;
   map<string, string>::iterator iter;
   bool is_encrypted = false;
-  bufferlist keybl;
-  const char* key;
+  bufferlist keybl,ivbl;
+  string key,iv;
 
   if (get_params() < 0)
     return;
@@ -2847,10 +2867,17 @@ void RGWInitMultipart::execute()
   is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
   if (is_encrypted)
   {
-    key = "1023456789012345678901234567890101234567890123456789012345678901";
-    dout(0) << "gbdebug : Yes enc it is wuth key" << key << dendl;
-    keybl.append(key);
+    RGW_KMS req_kms(s->cct);
+    string root_account = s->bucket_owner_id;
+    string key_enc,iv_enc; 
+    req_kms.make_kms_encrypt_request(root_account,key_enc, iv_enc,key,iv);
+    //Get the key from KMS and store it as attribute
+    dout(0) << "gbdebug : Mutlipart uploading with key " << key << dendl;
+    keybl.append(key_enc.c_str());
+    ivbl.append(iv_enc.c_str());
     attrs[RGW_ATTR_KEY] = keybl;
+    attrs[RGW_ATTR_IV] = ivbl;
+    dout(0) << "gbdebug : Yes enc it is wuth key" << key << dendl;
   }
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {

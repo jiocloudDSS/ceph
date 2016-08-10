@@ -121,7 +121,8 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
-  char *key;
+  string key;
+  string iv;
   off_t ofs;
   uint64_t total_len;
   off_t start;
@@ -146,8 +147,6 @@ public:
     if_unmod = NULL;
     if_match = NULL;
     if_nomatch = NULL;
-    key = NULL;
-    start = 0;
     ofs = 0;
     total_len = 0;
     end = -1;
@@ -414,7 +413,8 @@ protected:
   const char *if_match;
   const char *if_nomatch;
   string etag;
-  char *key;
+  string key;
+  string iv;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   const char *obj_manifest;
@@ -432,7 +432,6 @@ public:
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
     if_match = NULL;
-    key = NULL;
     if_nomatch = NULL;
     chunked_upload = false;
     obj_manifest = NULL;

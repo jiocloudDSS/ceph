@@ -586,6 +586,56 @@ class RGWResourceKeystoneInfo {
                                     string& reason);
 };
 
+class RGW_KMS: public RGWHTTPClient {
+private:
+  bufferlist rx_buffer;
+  bufferlist rx_headers_buffer;
+  bufferlist tx_buffer;
+  bufferlist::iterator tx_buffer_it;
+
+private:
+  void set_tx_buffer(const string& d) {
+    tx_buffer.clear();
+    tx_buffer.append(d);
+    tx_buffer_it = tx_buffer.begin();
+    set_send_length(tx_buffer.length());
+  }
+
+public:
+  RGW_KMS(CephContext *_cct)
+      : RGWHTTPClient(_cct) {
+  }
+
+  int receive_header(void *ptr, size_t len) {
+    rx_headers_buffer.append((char *)ptr, len);
+    return 0;
+  }
+  int receive_data(void *ptr, size_t len) {
+    rx_buffer.append((char *)ptr, len);
+    return 0;
+  }
+
+  int send_data(void *ptr, size_t len) {
+    if (!tx_buffer_it.get_remaining())
+      return 0; // nothing left to send
+
+    int l = MIN(tx_buffer_it.get_remaining(), len);
+    memcpy(ptr, tx_buffer_it.get_current_ptr().c_str(), l);
+    try {
+      tx_buffer_it.advance(l);
+    } catch (buffer::end_of_buffer &e) {
+      assert(0);
+    }
+
+    return l;
+  }
+
+  int make_kms_encrypt_request(string &root_acount, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv);
+  int make_kms_decrypt_request(string &root_acount, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv);
+
+};
+
+
 class dss_endpoint {
     public:
         static string endpoint;

@@ -2319,7 +2319,7 @@ protected:
 public:
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_info(_bi) {}
   virtual ~RGWPutObjProcessor() {}
-  virtual int prepare(RGWRados *_store, string *oid_rand, char** key = NULL) {
+  virtual int prepare(RGWRados *_store, string *oid_rand, string* key = NULL, string *iv = NULL) {
     store = _store;
     return 0;
   }
@@ -2434,7 +2434,7 @@ public:
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
-  int prepare(RGWRados *store, string *oid_rand, char** key = NULL);
+  int prepare(RGWRados *store, string *oid_rand, string* key = NULL, string* iv=NULL);
   virtual bool immutable_head() { return false; }
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;

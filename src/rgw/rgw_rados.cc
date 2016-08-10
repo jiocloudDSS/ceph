@@ -1131,7 +1131,7 @@ int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand, char** key )
+int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand, string* key, string* iv)
 {
   int r = prepare_init(store, oid_rand);
   if (r < 0) {

@@ -88,7 +88,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
   bufferlist metadata_bl, decrypted_bl;
-  if (key)
+  if (!key.empty())
   {
     unsigned char* read_data; 
     char right_part[16]; 
@@ -100,6 +100,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
     if (ret)
       goto done;
 
+    const char* c_key = key.c_str();
+    const char* c_iv = iv.c_str(); 
+
     read_data = reinterpret_cast<unsigned char *>(bl.c_str());
 
     /* Initialise the library */
@@ -110,15 +113,15 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
     dout(0) << "gbdebug Total part number " << full_chunks << dendl;
     for (iter=0; iter < full_chunks  ; iter++)
     {
-      decryptedtext_len = decrypt(read_data, chunk_size, (unsigned char*)key,iv,decryptedtext);
+      decryptedtext_len = decrypt(read_data, chunk_size, (unsigned char*)c_key,(unsigned char*)c_iv,decryptedtext);
       read_data += chunk_size;
       decrypted_bl.append((char*)decryptedtext, chunk_size);
       dout(0) << "gbdebug Doing for part number " << iter << dendl;
     }
 
     left_data = bl_len % chunk_size;
-    dout(0) << "gbdebug Length of Encrypted text " << bl_len << " and key is " << key << dendl;
-    decryptedtext_len = decrypt(read_data, left_data, (unsigned char*)key,iv,decryptedtext);
+    dout(0) << "gbdebug Length of Encrypted text " << bl_len << " and key is " << c_key << " and iv " << c_iv << dendl;
+    decryptedtext_len = decrypt(read_data, left_data, (unsigned char*)c_key,(unsigned char*)c_iv,decryptedtext);
 
     if (left_data > 32)
     {
@@ -251,7 +254,7 @@ done:
 send_data:
   if (get_data && !ret) {
     int r;
-    if (key)
+    if (!key.empty())
       r = s->cio->write(decrypted_bl.c_str() + bl_ofs, bl_len);
     else
       r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
@@ -3313,4 +3316,50 @@ bool RGWResourceKeystoneInfo::get_bucket_public_perm(const string& action,
     is_public_bucket = false;
     reason = "OK";
     return true;
+}
+
+
+int RGW_KMS::make_kms_encrypt_request(string &root_account, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv)
+{
+  string kms_url = cct->_conf->rgw_kms_encrypt_url;
+  if (kms_url[kms_url.size()] -1 != '/') {
+   kms_url.append("?"); 
+  }
+  kms_url.append("user_id=");
+  kms_url.append(root_account);
+  dout(0)<< "Final KMS URL " << kms_url << dendl;
+  int ret = 1 ;// = process("PUT", kms_url.c_str());
+  dec_key = "0123456789012345678901234567890101234567890123456789012345678901";
+  dec_iv = "01234567890123456";
+  enc_key = "Encoded key";
+  enc_iv = "Encoded IV";
+
+  if (ret < 0)
+    return 0;
+  // find key,iv by parsing
+  return 1;
+
+}
+
+
+int RGW_KMS::make_kms_decrypt_request(string &root_account, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv)
+{
+  string kms_url = cct->_conf->rgw_kms_decrypt_url;
+  if (kms_url[kms_url.size()] -1 != '/') {
+   kms_url.append("?"); 
+  }
+  kms_url.append("user_id=");
+  kms_url.append(root_account);
+  kms_url.append("&key=");
+  kms_url.append(enc_key);
+  kms_url.append("&iv=");
+  kms_url.append(enc_iv);
+  dout(0)<< "Final For Decoding KMS" << kms_url << dendl;
+  int ret = 1;// process("PUT", kms_url.c_str());
+  dec_key = "0123456789012345678901234567890101234567890123456789012345678901";
+  dec_iv = "01234567890123456";
+  if (ret < 0)
+    return 0;
+  // find key,iv by parsing
+  return 1;
 }
