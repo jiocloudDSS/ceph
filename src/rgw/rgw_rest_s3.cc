@@ -3341,7 +3341,6 @@ int RGW_KMS::make_kms_encrypt_request(string &root_account, RGWKmsData* kmsdata)
   if (ret < 0)
   {
     ret = -ERR_INTERNAL_ERROR;
-    dout(0) << " Unable to parse response from KMS "<< dendl;
     return ret; 
   }
 
@@ -3385,7 +3384,6 @@ int RGW_KMS::make_kms_decrypt_request(string &root_account, RGWKmsData* kmsdata)
   if (ret < 0)
   {
     ret = -ERR_INTERNAL_ERROR;
-    dout(0) << " Unable to parse response from KMS "<< dendl;
     return ret; 
   }
 

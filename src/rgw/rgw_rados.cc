@@ -9114,7 +9114,7 @@ int RGWKmsData::decode_json_enc(bufferlist& bl, CephContext *cct)
     JSONDecoder::decode_json("KMS_ENCRYPTED_MK_VERSION", mkey_enc , &parser, true);
 
   } catch (JSONDecoder::err& err) {
-    ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
+    ldout(cct, 0) << "KMS token parse error: " << err.message << dendl;
     return -EINVAL;
   }
 
