@@ -2303,6 +2303,7 @@ public:
     entries.clear();
   }
 };
+class RGWKmsData;
 
 class RGWPutObjProcessor
 {
@@ -2319,7 +2320,7 @@ protected:
 public:
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_info(_bi) {}
   virtual ~RGWPutObjProcessor() {}
-  virtual int prepare(RGWRados *_store, string *oid_rand, string* key = NULL, string *iv = NULL) {
+  virtual int prepare(RGWRados *_store, string *oid_rand, RGWKmsData** kmsdata = NULL) {
     store = _store;
     return 0;
   }
@@ -2434,7 +2435,7 @@ public:
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
-  int prepare(RGWRados *store, string *oid_rand, string* key = NULL, string* iv=NULL);
+  int prepare(RGWRados *store, string *oid_rand, RGWKmsData** kmsdata = NULL);
   virtual bool immutable_head() { return false; }
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
@@ -2450,6 +2451,18 @@ public:
   void set_version_id(const string& vid) {
     version_id = vid;
   }
+};
+
+class RGWKmsData {
+  public:
+  string key_dec;
+  string iv_dec;
+  string key_enc;
+  string iv_enc;
+  string mkey_enc;
+  int decode_json_enc(bufferlist& bl, CephContext *cct);
+  int decode_json_dec(bufferlist& bl, CephContext *cct);
+
 };
 
 int encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *key, unsigned char *iv, unsigned char *ciphertext);

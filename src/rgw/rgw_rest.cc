@@ -932,7 +932,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
   int len = 0;
   if (cl) 
   {
-    if (!key.empty())
+    if (kmsdata)
     {
       uint64_t buffer_length = cl;
       if (cl == 16)
@@ -949,7 +949,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       if (hash && read_len)
         hash->Update((const byte *)bp.c_str(),read_len);
 
-      dout(0) << "gbdebug Earlier Read length " << read_len << " " << key << " is" << dendl;
+      dout(0) << "gbdebug Earlier Read length " << read_len << " " << kmsdata->key_dec << " is" << dendl;
       if (read_len < 16 && read_len > 0)
       {
         unsigned deficit = 16 - read_len;
@@ -979,8 +979,8 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       //int decryptedtext_len;
       int  ciphertext_len;
       /* Encrypt the plaintext */
-      const char* c_key = key.c_str();
-      const char* c_iv = iv.c_str();
+      const char* c_key = kmsdata->key_dec.c_str();
+      const char* c_iv = kmsdata->iv_dec.c_str();
       ciphertext_len = encrypt (read_data, read_len, (unsigned char*)c_key, (unsigned char*)c_iv, ciphertext);
       dout(0) << "gbdebug Encryption done " << ciphertext_len  << " with  key " << c_key <<" and iv " << c_iv << dendl;
 

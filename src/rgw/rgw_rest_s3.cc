@@ -73,13 +73,6 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
-/* A 256 bit key */
-//extern unsigned char *key; 
-
-/* A 128 bit IV */
-extern unsigned char *iv ;
-
-
 
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
@@ -88,7 +81,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
   bufferlist metadata_bl, decrypted_bl;
-  if (!key.empty())
+  if (kmsdata)
   {
     unsigned char* read_data; 
     char right_part[16]; 
@@ -100,8 +93,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
     if (ret)
       goto done;
 
-    const char* c_key = key.c_str();
-    const char* c_iv = iv.c_str(); 
+    const char* c_key = kmsdata->key_dec.c_str();
+    const char* c_iv = kmsdata->iv_dec.c_str(); 
 
     read_data = reinterpret_cast<unsigned char *>(bl.c_str());
 
@@ -254,7 +247,7 @@ done:
 send_data:
   if (get_data && !ret) {
     int r;
-    if (!key.empty())
+    if (kmsdata)
       r = s->cio->write(decrypted_bl.c_str() + bl_ofs, bl_len);
     else
       r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
@@ -3319,47 +3312,87 @@ bool RGWResourceKeystoneInfo::get_bucket_public_perm(const string& action,
 }
 
 
-int RGW_KMS::make_kms_encrypt_request(string &root_account, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv)
+int RGW_KMS::make_kms_encrypt_request(string &root_account, RGWKmsData* kmsdata) 
 {
   string kms_url = cct->_conf->rgw_kms_encrypt_url;
   if (kms_url[kms_url.size()] -1 != '/') {
-   kms_url.append("?"); 
+    kms_url.append("?"); 
   }
   kms_url.append("user_id=");
   kms_url.append(root_account);
-  dout(0)<< "Final KMS URL " << kms_url << dendl;
-  int ret = 1 ;// = process("PUT", kms_url.c_str());
-  dec_key = "0123456789012345678901234567890101234567890123456789012345678901";
-  dec_iv = "01234567890123456";
-  enc_key = "Encoded key";
-  enc_iv = "Encoded IV";
-
+  dout(0)<< "gbdebug Final KMS URL " << kms_url << dendl;
+  int ret = 1 ;
+  
+  string empty ;
+  set_tx_buffer(empty);
+  ret = process("GET", kms_url.c_str());
   if (ret < 0)
-    return 0;
-  // find key,iv by parsing
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    dout(0) << " Unable to obtain encryped and decrypted keys from KMS "<< dendl;
+    return ret; 
+  }
+
+  string bufferprinter = "";
+  rx_buffer.copy(0, rx_buffer.length(), bufferprinter);
+  dout(0) << "gbdebug Printing RX buffer: " << bufferprinter << dendl; 
+
+  ret = kmsdata->decode_json_enc(rx_buffer, cct); 
+  if (ret < 0)
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    dout(0) << " Unable to parse response from KMS "<< dendl;
+    return ret; 
+  }
+
+  dout(0) << " gbdebug After parsing " << kmsdata->key_dec << " & " << kmsdata->iv_dec << dendl; 
+
+  kmsdata->key_dec= "0123456789012345678901234567890101234567890123456789012345678901";
+  kmsdata->iv_dec= "01234567890123456";
+
   return 1;
 
 }
 
 
-int RGW_KMS::make_kms_decrypt_request(string &root_account, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv)
+int RGW_KMS::make_kms_decrypt_request(string &root_account, RGWKmsData* kmsdata)
 {
   string kms_url = cct->_conf->rgw_kms_decrypt_url;
   if (kms_url[kms_url.size()] -1 != '/') {
-   kms_url.append("?"); 
+    kms_url.append("?"); 
   }
   kms_url.append("user_id=");
   kms_url.append(root_account);
-  kms_url.append("&key=");
-  kms_url.append(enc_key);
-  kms_url.append("&iv=");
-  kms_url.append(enc_iv);
-  dout(0)<< "Final For Decoding KMS" << kms_url << dendl;
-  int ret = 1;// process("PUT", kms_url.c_str());
-  dec_key = "0123456789012345678901234567890101234567890123456789012345678901";
-  dec_iv = "01234567890123456";
+  kms_url.append("&encrypted_data_key=");
+  kms_url.append(kmsdata->key_enc);
+  kms_url.append("&encrypted_data_iv=");
+  kms_url.append(kmsdata->iv_enc);
+  kms_url.append("&encryptedMKVersionId=");
+  kms_url.append(kmsdata->mkey_enc);
+  dout(0)<< "gbdebug Final URL  For Decoding KMS" << kms_url << dendl;
+  string empty ;
+  set_tx_buffer(empty);
+  int ret = 1;
+
+  ret = process("GET", kms_url.c_str());
   if (ret < 0)
-    return 0;
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    dout(0) << " Unable to obtain encryped and decrypted keys from KMS "<< dendl;
+    return ret; 
+  }
+  ret = kmsdata->decode_json_dec(rx_buffer, cct); 
+  if (ret < 0)
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    dout(0) << " Unable to parse response from KMS "<< dendl;
+    return ret; 
+  }
+
+  dout(0) << " gbdebug After parsing " << kmsdata->key_dec << " & " << kmsdata->iv_dec << dendl; 
+  
+  kmsdata->key_dec = "0123456789012345678901234567890101234567890123456789012345678901";
+  kmsdata->iv_dec = "01234567890123456";
   // find key,iv by parsing
-  return 1;
+  return 0;
 }

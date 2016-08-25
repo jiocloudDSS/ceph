@@ -630,8 +630,8 @@ public:
     return l;
   }
 
-  int make_kms_encrypt_request(string &root_acount, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv);
-  int make_kms_decrypt_request(string &root_acount, string& enc_key, string& enc_iv, string& dec_key, string& dec_iv);
+  int make_kms_encrypt_request(string &root_acount, RGWKmsData* kmsdata);
+  int make_kms_decrypt_request(string &root_acount, RGWKmsData* kmsdata);;
 
 };
 

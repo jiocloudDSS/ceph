@@ -1131,7 +1131,7 @@ int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand, string* key, string* iv)
+int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand, RGWKmsData** kmsdata) 
 {
   int r = prepare_init(store, oid_rand);
   if (r < 0) {
@@ -9097,3 +9097,47 @@ void handleErrors(void)
   ERR_print_errors_fp(stderr);
   abort();
 }
+
+int RGWKmsData::decode_json_enc(bufferlist& bl, CephContext *cct)
+{
+  JSONParser parser; 
+
+  if (!parser.parse(bl.c_str(), bl.length())) {
+    ldout(cct, 0) << "Keystone token parse error: malformed json" << dendl;
+    return -EINVAL;
+  }
+ try {
+    JSONDecoder::decode_json("KMS_RAW_DATA_IV", iv_dec, &parser, true);
+    JSONDecoder::decode_json("KMS_ENCRYPTED_DATA_IV", iv_enc, &parser, true);
+    JSONDecoder::decode_json("KMS_ENCRYPTED_DATA_KEY", key_enc, &parser, true);
+    JSONDecoder::decode_json("KMS_RAW_DATA_KEY", key_dec, &parser, true);
+    JSONDecoder::decode_json("KMS_ENCRYPTED_MK_VERSION", mkey_enc , &parser, true);
+
+  } catch (JSONDecoder::err& err) {
+    ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RGWKmsData::decode_json_dec(bufferlist& bl, CephContext *cct)
+{
+  JSONParser parser; 
+
+  if (!parser.parse(bl.c_str(), bl.length())) {
+    ldout(cct, 0) << "KMS token parse error: malformed json" << dendl;
+    return -EINVAL;
+  }
+ try {
+    JSONDecoder::decode_json("KMS_RAW_DATA_IV", iv_dec, &parser, true);
+    JSONDecoder::decode_json("KMS_RAW_DATA_KEY", key_dec, &parser, true);
+
+  } catch (JSONDecoder::err& err) {
+    ldout(cct, 0) << "KMS token parse error: " << err.message << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+

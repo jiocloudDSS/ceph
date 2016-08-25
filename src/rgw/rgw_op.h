@@ -121,8 +121,7 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
-  string key;
-  string iv;
+  RGWKmsData* kmsdata;
   off_t ofs;
   uint64_t total_len;
   off_t start;
@@ -147,6 +146,7 @@ public:
     if_unmod = NULL;
     if_match = NULL;
     if_nomatch = NULL;
+    kmsdata = NULL;
     ofs = 0;
     total_len = 0;
     end = -1;
@@ -413,8 +413,7 @@ protected:
   const char *if_match;
   const char *if_nomatch;
   string etag;
-  string key;
-  string iv;
+  RGWKmsData* kmsdata;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   const char *obj_manifest;
@@ -431,6 +430,7 @@ public:
     ofs = 0;
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
+    kmsdata = NULL;
     if_match = NULL;
     if_nomatch = NULL;
     chunked_upload = false;
