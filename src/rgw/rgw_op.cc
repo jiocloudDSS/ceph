@@ -936,7 +936,7 @@ void RGWGetObj::execute()
 
   keybl = attrs[RGW_ATTR_KEY];
   ivbl = attrs[RGW_ATTR_IV];
-  mkeybl = attrs[RGW_ATTR_MKEY];
+  mkeybl = attrs[RGW_ATTR_MKEYVERSION];
   if (keybl.length())
   {
     kmsdata = new RGWKmsData();
@@ -946,9 +946,7 @@ void RGWGetObj::execute()
     ret = req_kms.make_kms_decrypt_request(root_account,kmsdata);
     if (ret < 0)
       return;
-    dout(0) << "gbdebug decrypted "<< dendl;
-    dout(0)  << kmsdata->key_dec.c_str() << dendl;
-    dout(0) << "gbdebug iv" << kmsdata->iv_dec.c_str() << dendl;
+    dout(0) << "SSEINFO decrypted key "<< kmsdata->key_dec.c_str() << " iv " << kmsdata->iv_dec.c_str() <<  dendl;
   }
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end()) {
@@ -979,6 +977,9 @@ void RGWGetObj::execute()
 
 done_err:
   send_response_data(bl, 0, 0);
+
+  if (kmsdata)
+    delete kmsdata;
 }
 
 int RGWGetObj::init_common()
@@ -1601,7 +1602,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand, RGW
     string root_account = s->bucket_owner_id;
     bufferlist keybl = attrs[RGW_ATTR_KEY];
     bufferlist ivbl = attrs[RGW_ATTR_IV];
-    bufferlist mkeybl = attrs[RGW_ATTR_MKEY];
+    bufferlist mkeybl = attrs[RGW_ATTR_MKEYVERSION];
     if (keybl.length() > 0)
     {
       *kmsdata = new RGWKmsData();
@@ -1849,6 +1850,10 @@ void RGWPutObj::execute()
 
   processor = select_processor(*(RGWObjectCtx *)s->obj_ctx, &multipart);
   is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
+
+  if (!is_enc)
+    is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
+
   is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
   if (!multipart && is_encrypted)
   {
@@ -1859,13 +1864,12 @@ void RGWPutObj::execute()
     if (ret < 0)
       goto done;
     //Get the key from KMS and store it as attribute
-    dout(0) << "gbdebug : Normal uploading with key " << kmsdata->key_dec << " and " << "iv is " << kmsdata->iv_dec << dendl;
     keybl.append(kmsdata->key_enc.c_str());
     ivbl.append(kmsdata->iv_enc.c_str());
     mkeybl.append(kmsdata->mkey_enc.c_str());
     attrs[RGW_ATTR_KEY] = keybl;
     attrs[RGW_ATTR_IV] = ivbl;
-    attrs[RGW_ATTR_MKEY] = mkeybl;
+    attrs[RGW_ATTR_MKEYVERSION] = mkeybl;
   }
 
   //For multipart, the key gets populated here
@@ -2021,6 +2025,8 @@ done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
+  if (kmsdata)
+    delete kmsdata;
 }
 
 int RGWPostObj::verify_permission()
@@ -2873,6 +2879,9 @@ void RGWInitMultipart::execute()
 
   const char* is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
 
+  if (!is_enc)
+    is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
+
   //Get the key from KMS and store it as attribute
   is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
   if (is_encrypted)
@@ -2884,14 +2893,14 @@ void RGWInitMultipart::execute()
     if (ret < 0)
       return;
     //Get the key from KMS and store it as attribute
-    dout(0) << "gbdebug : Mutlipart uploading with key " << key << dendl;
+    dout(0) << "SSEINFO : Multipart uploading with key " << key << dendl;
     keybl.append(kmsdata->key_enc.c_str());
     ivbl.append(kmsdata->iv_enc.c_str());
     mkeybl.append(kmsdata->mkey_enc.c_str());
     attrs[RGW_ATTR_KEY] = keybl;
     attrs[RGW_ATTR_IV] = ivbl;
-    attrs[RGW_ATTR_MKEY] = mkeybl;
-    dout(0) << "gbdebug : Yes enc it is wuth key" << key << dendl;
+    attrs[RGW_ATTR_MKEYVERSION] = mkeybl;
+    delete kmsdata;
   }
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {

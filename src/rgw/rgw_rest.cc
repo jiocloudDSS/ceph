@@ -909,14 +909,6 @@ int RGWPutObj_ObjStore::get_params()
   return 0;
 }
 
-/* A 512 bit key */
-//unsigned char *key = (unsigned char *)"0123456789012345678901234567890101234567890123456789012345678901";
-
-/* A 128 bit IV */
-//unsigned char *iv = (unsigned char *)"01234567890123456";
-
-
-
 int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
 {
   size_t cl;
@@ -932,13 +924,9 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
   int len = 0;
   if (cl) 
   {
-    if (kmsdata)
+    if (kmsdata && cl > 15)
     {
       uint64_t buffer_length = cl;
-      if (cl == 16)
-        buffer_length = 32;
-      else if (cl< 16)
-        buffer_length = 16;
       bufferptr bp(buffer_length);
 
       int read_len; /* cio->read() expects int * */
@@ -949,55 +937,26 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       if (hash && read_len)
         hash->Update((const byte *)bp.c_str(),read_len);
 
-      dout(0) << "gbdebug Earlier Read length " << read_len << " " << kmsdata->key_dec << " is" << dendl;
-      if (read_len < 16 && read_len > 0)
-      {
-        unsigned deficit = 16 - read_len;
-        s->content_length += deficit;
-        dout(0) << "gbdebug deficit " << deficit << " " << dendl;
-        for (int i = read_len ; i < 16 ; i++)
-          read_data[i] = deficit + '0'; //for now
-        read_len = 16; 
-      }
-      else if (read_len == 16 && read_len > 0)
-      {
-        s->content_length += 16;
-        for (int i = read_len; i < 32; i++)
-          read_data[i] = '0'; //for now
-        read_len = 32; 
-      }
       len = read_len;
-
       /* Initialise the library */
       ERR_load_crypto_strings();
       OpenSSL_add_all_algorithms();
       OPENSSL_config(NULL);
+      unsigned char* ciphertext = new unsigned char[read_len];
 
-      unsigned char ciphertext[2*read_len];
-      //unsigned char decryptedtext[2*read_len];
-
-      //int decryptedtext_len;
       int  ciphertext_len;
       /* Encrypt the plaintext */
       const char* c_key = kmsdata->key_dec.c_str();
       const char* c_iv = kmsdata->iv_dec.c_str();
-      ciphertext_len = encrypt (read_data, read_len, (unsigned char*)c_key, (unsigned char*)c_iv, ciphertext);
-      dout(0) << "gbdebug Encryption done " << ciphertext_len  << " with  key " << c_key <<" and iv " << c_iv << dendl;
-
-      /* Do something useful with the ciphertext here */
-      //printf("Ciphertext is:\n");
-      //BIO_dump_fp (stdout, (const char *)ciphertext, ciphertext_len);
-
-      /* Decrypt the ciphertext 
-         decryptedtext_len = decrypt(ciphertext, ciphertext_len , (unsigned char*)key, iv,
-         decryptedtext);
-
-         decryptedtext[decryptedtext_len] = '\0';
-
-      //dout(0) << "gbdebug Decrypted text " << decryptedtext << dendl; */
-
-      char* ctext = (char*)ciphertext;
-      bl.append(ctext, len);
+      ciphertext_len = encrypt(read_data, read_len, (unsigned char*)c_key, (unsigned char*)c_iv, ciphertext);
+      if (ciphertext_len == -1)
+      {
+        dout(0) << " Error while encrypting " << dendl;
+        return -ERR_INTERNAL_ERROR;
+      }
+      dout(0) << "SSEINFO Encryption done " << ciphertext_len  << dendl;
+      bl.append((char*)ciphertext, len);
+      delete ciphertext;
       EVP_cleanup();
       ERR_free_strings();
     }
@@ -1011,11 +970,9 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       if (r < 0) {
         return r;
       }
-
       len = read_len;
       bl.append(bp, 0, len);
     }
-
   }
 
   if ((uint64_t)ofs + len > RGW_MAX_PUT_SIZE) {
