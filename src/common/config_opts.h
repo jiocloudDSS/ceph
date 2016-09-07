@@ -965,8 +965,8 @@ OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is
 OPTION(rgw_swift_tenant_name, OPT_STR, "")  // tenant name to use for swift access
 OPTION(rgw_swift_enforce_content_length, OPT_BOOL, false)  // enforce generation of Content-Length even in cost of performance or scalability
 OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
-OPTION(rgw_kms_encrypt_url, OPT_STR, "")  // url for keystone server
-OPTION(rgw_kms_decrypt_url, OPT_STR, "")  // url for keystone server
+OPTION(rgw_kms_encrypt_url, OPT_STR, "")  // url for kms encrypt
+OPTION(rgw_kms_decrypt_url, OPT_STR, "")  // url for kms decrypt
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
 OPTION(rgw_keystone_admin_user, OPT_STR, "")  // keystone admin user name
 OPTION(rgw_keystone_admin_password, OPT_STR, "")  // keystone admin user password
