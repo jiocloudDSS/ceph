@@ -893,9 +893,11 @@ void RGWGetObj::pre_exec()
 void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
-  bufferlist bl;
+  bufferlist bl,keybl,ivbl,mkeybl;
   gc_invalidate_time = ceph_clock_now(s->cct);
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+  RGW_KMS req_kms(s->cct);
+  string root_account = s->bucket_owner_id;
 
   RGWGetObj_CB cb(this);
 
@@ -932,6 +934,20 @@ void RGWGetObj::execute()
   if (ret < 0)
     goto done_err;
 
+  keybl = attrs[RGW_ATTR_KEY];
+  ivbl = attrs[RGW_ATTR_IV];
+  mkeybl = attrs[RGW_ATTR_MKEYVERSION];
+  if (keybl.length())
+  {
+    kmsdata = new RGWKmsData();
+    keybl.copy(0,keybl.length(),kmsdata->key_enc);
+    ivbl.copy(0,ivbl.length(),kmsdata->iv_enc);
+    mkeybl.copy(0,mkeybl.length(),kmsdata->mkey_enc);
+    ret = req_kms.make_kms_decrypt_request(root_account,kmsdata);
+    if (ret < 0)
+      return;
+    dout(0) << "SSEINFO decrypted key "<< kmsdata->key_dec.c_str() << " iv " << kmsdata->iv_dec.c_str() <<  dendl;
+  }
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end()) {
     ret = handle_user_manifest(attr_iter->second.c_str());
@@ -961,6 +977,9 @@ void RGWGetObj::execute()
 
 done_err:
   send_response_data(bl, 0, 0);
+
+  if (kmsdata)
+    delete kmsdata;
 }
 
 int RGWGetObj::init_common()
@@ -1524,7 +1543,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand, RGWKmsData** kmsdata=NULL); 
   int do_complete(string& etag, time_t *mtime, time_t set_mtime,
                   map<string, bufferlist>& attrs,
                   const char *if_match = NULL, const char *if_nomatch = NULL);
@@ -1535,7 +1554,7 @@ public:
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand, RGWKmsData** kmsdata)
 {
   int r = prepare_init(store, NULL);
   if (r < 0) {
@@ -1564,6 +1583,37 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
     return -EINVAL;
   }
 
+  rgw_obj meta_obj;
+  string meta_oid;
+  map<string, bufferlist> attrs;
+  meta_oid = mp.get_meta();
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = s->object.name;
+  int ret;
+
+  ret = get_obj_attrs(store, s, meta_obj, attrs);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj << " ret=" << ret << dendl;
+    //return;
+  }
+  else {
+    RGW_KMS req_kms(s->cct);
+    string root_account = s->bucket_owner_id;
+    bufferlist keybl = attrs[RGW_ATTR_KEY];
+    bufferlist ivbl = attrs[RGW_ATTR_IV];
+    bufferlist mkeybl = attrs[RGW_ATTR_MKEYVERSION];
+    if (keybl.length() > 0)
+    {
+      *kmsdata = new RGWKmsData();
+      keybl.copy(0,keybl.length(),(*kmsdata)->key_enc);
+      ivbl.copy(0,ivbl.length(),(*kmsdata)->iv_enc);
+      mkeybl.copy(0,mkeybl.length(),(*kmsdata)->mkey_enc);
+      ret = req_kms.make_kms_decrypt_request(root_account,*kmsdata);
+      if (ret < 0)
+        return ret;
+    }
+  }
   string upload_prefix = oid + ".";
 
   if (!oid_rand) {
@@ -1741,12 +1791,15 @@ void RGWPutObj::execute()
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
-  bufferlist bl, aclbl;
+  bufferlist bl, aclbl,keybl,ivbl,mkeybl;
   map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
-  bool multipart;
-
+  bool multipart, is_encrypted = false;
+  int i = 0;
+  bool exists;
+  const char* is_enc; 
+ 
   bool need_calc_md5 = (obj_manifest == NULL);
 
 
@@ -1796,14 +1849,37 @@ void RGWPutObj::execute()
   }
 
   processor = select_processor(*(RGWObjectCtx *)s->obj_ctx, &multipart);
+  is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
 
-  ret = processor->prepare(store, NULL);
+  if (!is_enc)
+    is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
+
+  is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
+  if (!multipart && is_encrypted)
+  {
+    RGW_KMS req_kms(s->cct);
+    kmsdata = new RGWKmsData();
+    string root_account = s->bucket_owner_id;
+    ret = req_kms.make_kms_encrypt_request(root_account,kmsdata);
+    if (ret < 0)
+      goto done;
+    //Get the key from KMS and store it as attribute
+    keybl.append(kmsdata->key_enc.c_str());
+    ivbl.append(kmsdata->iv_enc.c_str());
+    mkeybl.append(kmsdata->mkey_enc.c_str());
+    attrs[RGW_ATTR_KEY] = keybl;
+    attrs[RGW_ATTR_IV] = ivbl;
+    attrs[RGW_ATTR_MKEYVERSION] = mkeybl;
+  }
+
+  //For multipart, the key gets populated here
+  ret = processor->prepare(store, NULL, &kmsdata);
   if (ret < 0)
     goto done;
-
   do {
+    i++;
     bufferlist data;
-    len = get_data(data);
+    len = get_data(data,&hash);
     if (len < 0) {
       ret = len;
       goto done;
@@ -1949,6 +2025,8 @@ done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
+  if (kmsdata)
+    delete kmsdata;
 }
 
 int RGWPostObj::verify_permission()
@@ -2784,6 +2862,9 @@ void RGWInitMultipart::execute()
   map<string, bufferlist> attrs;
   rgw_obj obj;
   map<string, string>::iterator iter;
+  bool is_encrypted = false;
+  bufferlist keybl,ivbl,mkeybl;
+  string key,iv;
 
   if (get_params() < 0)
     return;
@@ -2794,6 +2875,32 @@ void RGWInitMultipart::execute()
   policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
+
+  const char* is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
+
+  if (!is_enc)
+    is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
+
+  //Get the key from KMS and store it as attribute
+  is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
+  if (is_encrypted)
+  {
+    RGW_KMS req_kms(s->cct);
+    RGWKmsData* kmsdata = new RGWKmsData();
+    string root_account = s->bucket_owner_id;
+    ret = req_kms.make_kms_encrypt_request(root_account,kmsdata);
+    if (ret < 0)
+      return;
+    //Get the key from KMS and store it as attribute
+    dout(0) << "SSEINFO : Multipart uploading with key " << key << dendl;
+    keybl.append(kmsdata->key_enc.c_str());
+    ivbl.append(kmsdata->iv_enc.c_str());
+    mkeybl.append(kmsdata->mkey_enc.c_str());
+    attrs[RGW_ATTR_KEY] = keybl;
+    attrs[RGW_ATTR_IV] = ivbl;
+    attrs[RGW_ATTR_MKEYVERSION] = mkeybl;
+    delete kmsdata;
+  }
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {
     bufferlist& attrbl = attrs[iter->first];
