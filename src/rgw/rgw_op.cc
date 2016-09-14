@@ -1853,8 +1853,16 @@ void RGWPutObj::execute()
 
   if (!is_enc)
     is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
+  
+  if (is_enc && (strcmp(is_enc,"AES256") != 0))
+  {
+    // wrong value algo. Error out
+    ret = -ERR_INVALID_ENC_ALGO;
+    goto done;
+  }
+  else if (is_enc)
+    is_encrypted = true;
 
-  is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
   if (!multipart && is_encrypted)
   {
     RGW_KMS req_kms(s->cct);
@@ -2883,6 +2891,15 @@ void RGWInitMultipart::execute()
     is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
 
   //Get the key from KMS and store it as attribute
+  if (is_enc && (strcmp(is_enc,"AES256") != 0))
+  {
+    // wrong value algo. Error out
+    ret = -ERR_INVALID_ENC_ALGO;
+    return;
+  }
+  else if (is_enc)
+    is_encrypted = true;
+
   is_encrypted = (is_enc) ? (strcmp(is_enc,"AES256")== 0) : false ; 
   if (is_encrypted)
   {

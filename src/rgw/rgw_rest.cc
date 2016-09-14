@@ -550,6 +550,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
   bool is_options_request = (s->op == OP_OPTIONS);
   bool is_get_request = (s->op == OP_GET);
   bool is_put_request = (s->op == OP_PUT);
+  bool can_encrypted = ((op->get_type() == RGW_OP_INIT_MULTIPART) || (op->get_type() == RGW_OP_PUT_OBJ)); 
   char *allowed_origins = new char[s->cct->_conf->rgw_cors_allowed_origin.length() + 1];
   strcpy(allowed_origins, s->cct->_conf->rgw_cors_allowed_origin.c_str());
   const char *orig = s->info.env->get("HTTP_ORIGIN");
@@ -571,6 +572,22 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       ldout(s->cct, 0) << "WARNING: No matching allowed origin found in config, check ORIGIN header, will not send CORS headers" << dendl;
     }
   }
+
+  if (can_encrypted)
+  {
+    const char* is_enc; 
+    is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
+
+    if (!is_enc)
+      is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
+
+    if (is_enc && (strcmp(is_enc,"AES256") == 0))
+    {
+      s->cio->print("x-jcs-server-side-encryption-customer: %s\r\n", is_enc);
+    }
+  }
+
+
       
   if((is_send_cors_headers) &&  (is_token_based_request || is_options_request)) {
     string allowed_methods = s->cct->_conf->rgw_cors_allowed_methods; 
@@ -957,7 +974,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       dout(0) << "SSEINFO Encryption done " << ciphertext_len  << dendl;
       bl.append((char*)ciphertext, len);
       delete ciphertext;
-      EVP_cleanup();
+      //EVP_cleanup();
       ERR_free_strings();
     }
     else
