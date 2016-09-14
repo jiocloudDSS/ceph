@@ -87,7 +87,6 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
     int decryptedtext_len,left_data,iter, full_chunks ;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
     unsigned char* decryptedtext = new unsigned char[chunk_size];
-    char deficit_char; 
     if (ret)
       goto done;
 
@@ -133,7 +132,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
       decrypted_bl.append((char*)read_data, left_data);
     }
     delete decryptedtext;
-    EVP_cleanup();
+    //EVP_cleanup();
     ERR_free_strings();
   }
   if (sent_header)
