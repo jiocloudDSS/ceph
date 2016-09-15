@@ -550,7 +550,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
   bool is_options_request = (s->op == OP_OPTIONS);
   bool is_get_request = (s->op == OP_GET);
   bool is_put_request = (s->op == OP_PUT);
-  bool can_encrypted = ((op->get_type() == RGW_OP_INIT_MULTIPART) || (op->get_type() == RGW_OP_PUT_OBJ)); 
+  bool can_encrypted = op && ((op->get_type() == RGW_OP_INIT_MULTIPART) || (op->get_type() == RGW_OP_PUT_OBJ));
   char *allowed_origins = new char[s->cct->_conf->rgw_cors_allowed_origin.length() + 1];
   strcpy(allowed_origins, s->cct->_conf->rgw_cors_allowed_origin.c_str());
   const char *orig = s->info.env->get("HTTP_ORIGIN");
