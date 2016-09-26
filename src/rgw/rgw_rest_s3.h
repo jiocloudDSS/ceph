@@ -164,7 +164,7 @@ public:
   int get_params();
   int complete_get_params();
   void send_response();
-  int get_data(bufferlist& bl);
+  int get_data(bufferlist& bl,MD5* hash= NULL);
 };
 
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
@@ -585,6 +585,56 @@ class RGWResourceKeystoneInfo {
                                     bool& is_public_bucket,
                                     string& reason);
 };
+
+class RGW_KMS: public RGWHTTPClient {
+private:
+  bufferlist rx_buffer;
+  bufferlist rx_headers_buffer;
+  bufferlist tx_buffer;
+  bufferlist::iterator tx_buffer_it;
+
+private:
+  void set_tx_buffer(const string& d) {
+    tx_buffer.clear();
+    tx_buffer.append(d);
+    tx_buffer_it = tx_buffer.begin();
+    set_send_length(tx_buffer.length());
+  }
+
+public:
+  RGW_KMS(CephContext *_cct)
+      : RGWHTTPClient(_cct) {
+  }
+
+  int receive_header(void *ptr, size_t len) {
+    rx_headers_buffer.append((char *)ptr, len);
+    return 0;
+  }
+  int receive_data(void *ptr, size_t len) {
+    rx_buffer.append((char *)ptr, len);
+    return 0;
+  }
+
+  int send_data(void *ptr, size_t len) {
+    if (!tx_buffer_it.get_remaining())
+      return 0; // nothing left to send
+
+    int l = MIN(tx_buffer_it.get_remaining(), len);
+    memcpy(ptr, tx_buffer_it.get_current_ptr().c_str(), l);
+    try {
+      tx_buffer_it.advance(l);
+    } catch (buffer::end_of_buffer &e) {
+      assert(0);
+    }
+
+    return l;
+  }
+
+  int make_kms_encrypt_request(string &root_acount, RGWKmsData* kmsdata);
+  int make_kms_decrypt_request(string &root_acount, RGWKmsData* kmsdata);;
+
+};
+
 
 class dss_endpoint {
     public:
