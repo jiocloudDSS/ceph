@@ -550,6 +550,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
   bool is_options_request = (s->op == OP_OPTIONS);
   bool is_get_request = (s->op == OP_GET);
   bool is_put_request = (s->op == OP_PUT);
+  bool can_encrypted = op && ((op->get_type() == RGW_OP_INIT_MULTIPART) || (op->get_type() == RGW_OP_PUT_OBJ));
   char *allowed_origins = new char[s->cct->_conf->rgw_cors_allowed_origin.length() + 1];
   strcpy(allowed_origins, s->cct->_conf->rgw_cors_allowed_origin.c_str());
   const char *orig = s->info.env->get("HTTP_ORIGIN");
@@ -571,6 +572,22 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       ldout(s->cct, 0) << "WARNING: No matching allowed origin found in config, check ORIGIN header, will not send CORS headers" << dendl;
     }
   }
+
+  if (can_encrypted)
+  {
+    const char* is_enc; 
+    is_enc = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
+
+    if (!is_enc)
+      is_enc = s->info.env->get("HTTP_X_JCS_SERVER_SIDE_ENCRYPTION");
+
+    if (is_enc && (strcmp(is_enc,"AES256") == 0))
+    {
+      s->cio->print("x-jcs-server-side-encryption-customer: %s\r\n", is_enc);
+    }
+  }
+
+
       
   if((is_send_cors_headers) &&  (is_token_based_request || is_options_request)) {
     string allowed_methods = s->cct->_conf->rgw_cors_allowed_methods; 
@@ -909,7 +926,7 @@ int RGWPutObj_ObjStore::get_params()
   return 0;
 }
 
-int RGWPutObj_ObjStore::get_data(bufferlist& bl)
+int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
 {
   size_t cl;
   uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
@@ -922,15 +939,51 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   int len = 0;
-  if (cl) {
-    bufferptr bp(cl);
+  if (cl) 
+  {
+    if (kmsdata && cl > 15)
+    {
+      uint64_t buffer_length = cl;
+      bufferptr bp(buffer_length);
 
-    int read_len; /* cio->read() expects int * */
-    int r = s->cio->read(bp.c_str(), cl, &read_len);
-    len = read_len;
-    if (r < 0)
-      return r;
-    bl.append(bp, 0, len);
+      int read_len; /* cio->read() expects int * */
+      int r = s->cio->read(bp.c_str(), cl, &read_len);
+      if (r < 0)
+        return r;
+      unsigned char* read_data = reinterpret_cast<unsigned char *>(bp.c_str());
+      if (hash && read_len)
+        hash->Update((const byte *)bp.c_str(),read_len);
+
+      len = read_len;
+      unsigned char* ciphertext = new unsigned char[read_len];
+
+      int  ciphertext_len;
+      /* Encrypt the plaintext */
+      const char* c_key = kmsdata->key_dec.c_str();
+      const char* c_iv = kmsdata->iv_dec.c_str();
+      ciphertext_len = encrypt(read_data, read_len, (unsigned char*)c_key, (unsigned char*)c_iv, ciphertext);
+      if (ciphertext_len == -1)
+      {
+        dout(0) << " Error while encrypting " << dendl;
+        return -ERR_INTERNAL_ERROR;
+      }
+      dout(0) << "SSEINFO Encryption done " << ciphertext_len  << dendl;
+      bl.append((char*)ciphertext, len);
+      delete ciphertext;
+    }
+    else
+    {
+      bufferptr bp(cl);
+      int read_len; /* cio->read() expects int * */
+      int r = s->cio->read(bp.c_str(), cl, &read_len);
+      if (hash && read_len)
+        hash->Update((const byte *)bp.c_str(),read_len);
+      if (r < 0) {
+        return r;
+      }
+      len = read_len;
+      bl.append(bp, 0, len);
+    }
   }
 
   if ((uint64_t)ofs + len > RGW_MAX_PUT_SIZE) {

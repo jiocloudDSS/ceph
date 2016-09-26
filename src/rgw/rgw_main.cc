@@ -1241,7 +1241,11 @@ int main(int argc, const char **argv)
 
   /* setup openssl multi-threading functions */
   openssl_thread_setup();
-  
+  /* Initialise the library */
+  ERR_load_crypto_strings();
+  OpenSSL_add_all_algorithms();
+  OPENSSL_config(NULL);
+  srand ( time(NULL) );
   FCGX_Init();
 
   int r = 0;
@@ -1437,6 +1441,8 @@ int main(int argc, const char **argv)
   /* cleanup openssl multi-threading functions */
   openssl_thread_cleanup();
 
+  EVP_cleanup();
+  ERR_free_strings();
   rgw_perf_stop(g_ceph_context);
 
   dout(1) << "final shutdown" << dendl;

@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <math.h>
 
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
@@ -72,17 +73,64 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   const char *content_type = NULL;
   string content_type_str;
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
-  bufferlist metadata_bl;
+  bufferlist metadata_bl, decrypted_bl;
+  if (kmsdata)
+  {
+    unsigned char* read_data; 
+    int decryptedtext_len,left_data,iter, full_chunks ;
+    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    unsigned char* decryptedtext = new unsigned char[chunk_size];
+    if (ret)
+      goto done;
 
-  if (ret)
-    goto done;
+    const char* c_key = kmsdata->key_dec.c_str();
+    const char* c_iv = kmsdata->iv_dec.c_str(); 
 
+    read_data = reinterpret_cast<unsigned char *>(bl.c_str());
+    full_chunks = floor(((double)bl_len)/chunk_size);
+    dout(0) << "SSEINFO Total part number " << full_chunks << dendl;
+    for (iter=0; iter < full_chunks  ; iter++)
+    {
+      decryptedtext_len = decrypt(read_data, chunk_size, (unsigned char*)c_key,(unsigned char*)c_iv,decryptedtext);
+      if (decryptedtext_len == -1)
+      {
+        dout(0) << " Error while decrypting " << dendl;
+        return -ERR_INTERNAL_ERROR;
+      }
+      read_data += chunk_size;
+      decrypted_bl.append((char*)decryptedtext, chunk_size);
+      dout(0) << "SSEINFO Doing for part number " << iter << dendl;
+    }
+
+    left_data = bl_len % chunk_size;
+    if (left_data > 15)
+    {
+      dout(0) << "SSEINFO Length of Encrypted text " << bl_len << " and key is " << c_key << " " << strlen(c_key) << " and iv " << c_iv << " " << strlen(c_iv) << dendl;
+      decryptedtext_len = decrypt(read_data, left_data, (unsigned char*)c_key,(unsigned char*)c_iv,decryptedtext);
+      if (decryptedtext_len == -1)
+      {
+        dout(0) << " Error while decrypting " << dendl;
+        return -ERR_INTERNAL_ERROR;
+      }
+      decrypted_bl.append((char*)decryptedtext, left_data);
+      string bufferprinter = "";
+      decrypted_bl.copy(0, decrypted_bl.length(), bufferprinter);
+      dout(0) << "SSEINFO Decrypted text " << bufferprinter << dendl;
+    }
+    else if (left_data > 0)
+    {
+      dout(0) << "SSEINFO Not decrypting tail" << dendl;
+      decrypted_bl.append((char*)read_data, left_data);
+    }
+    delete decryptedtext;
+  }
   if (sent_header)
     goto send_data;
 
@@ -179,7 +227,11 @@ done:
 
 send_data:
   if (get_data && !ret) {
-    int r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
+    int r;
+    if (kmsdata)
+      r = s->cio->write(decrypted_bl.c_str() + bl_ofs, bl_len);
+    else
+      r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
   }
@@ -1363,7 +1415,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
   return 0;
 }
 
-int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
+int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl,MD5* hash)
 {
   bool boundary;
   bool done;
@@ -3238,4 +3290,115 @@ bool RGWResourceKeystoneInfo::get_bucket_public_perm(const string& action,
     is_public_bucket = false;
     reason = "OK";
     return true;
+}
+
+// Make a kms request for encrypted as well as decrypted key/iv
+// We will use encrypted keys to store in xattr
+// Decrypted keys,iv will be used to encode data
+int RGW_KMS::make_kms_encrypt_request(string &root_account, RGWKmsData* kmsdata) 
+{
+  string kms_url = cct->_conf->rgw_kms_encrypt_url;
+  if (kms_url[kms_url.size() -1] != '/') {
+    kms_url.append("?"); 
+  }
+  else
+    kms_url[kms_url.size() -1] = '?';
+
+  kms_url.append("user_id=");
+  kms_url.append(root_account);
+  dout(0)<< "SSEINFO Final KMS URL " << kms_url << dendl;
+  int ret = 1 ;
+  
+  string empty ;
+  set_tx_buffer(empty);
+  utime_t begin_time = ceph_clock_now(g_ceph_context);
+  ret = process("GET", kms_url.c_str());
+  utime_t end_time = ceph_clock_now(g_ceph_context);
+  end_time = end_time - begin_time;
+  dout(0) << "SSEINFO: KMS Encrypt response time (milliseconds): " << end_time.to_msec() << dendl;
+
+  if (ret < 0)
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    dout(0) << " Unable to obtain encryped and decrypted keys from KMS "<< dendl;
+    return ret; 
+  }
+
+  //string bufferprinter = "";
+  //rx_buffer.copy(0, rx_buffer.length(), bufferprinter);
+  //dout(0) << "SSEINFO Printing RX buffer: " << bufferprinter << dendl; 
+
+  ret = kmsdata->decode_json_enc(rx_buffer, cct); 
+  if (ret < 0)
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    return ret; 
+  }
+  
+  if (kmsdata->key_dec.size() != 64 || kmsdata->iv_dec.size() != 16)
+  {
+    dout(0) << "SSEINFO KMS Key Size " << kmsdata->key_dec.size() << " or IV Size not right" << " " << kmsdata->iv_dec.size() << dendl;
+    ret = -ERR_INTERNAL_ERROR; 
+    return ret; 
+  }
+
+  dout(0) << " SSEINFO After parsing " << kmsdata->key_dec << " & " << kmsdata->iv_dec << dendl; 
+  return 1;
+}
+
+
+// Make a kms call for decrypted key/iv
+// We extract encrypted keys from xattr
+// Decrypted keys,iv will be used to decode data
+int RGW_KMS::make_kms_decrypt_request(string &root_account, RGWKmsData* kmsdata)
+{
+  string kms_url = cct->_conf->rgw_kms_decrypt_url;
+  if (kms_url[kms_url.size()] -1 != '/') {
+    kms_url.append("?"); 
+  }
+  kms_url.append("user_id=");
+  kms_url.append(root_account);
+  kms_url.append("&encrypted_data_key=");
+  kms_url.append(kmsdata->key_enc);
+  kms_url.append("&encrypted_data_iv=");
+  kms_url.append(kmsdata->iv_enc);
+  kms_url.append("&encryptedMKVersionId=");
+  kms_url.append(kmsdata->mkey_enc);
+  kms_url.append("&randomId=");
+  int id = rand() % 900000 + 100000;
+  char* cid = new char[7];
+  sprintf(cid,"%d",id);
+  kms_url.append(cid);
+  dout(0)<< "SSEINFO Final URL  For Decoding KMS" << kms_url << dendl;
+  string empty ;
+  set_tx_buffer(empty);
+  int ret = 1;
+
+  utime_t begin_time = ceph_clock_now(g_ceph_context);
+  ret = process("GET", kms_url.c_str());
+  utime_t end_time = ceph_clock_now(g_ceph_context);
+  end_time = end_time - begin_time;
+  
+  dout(0) << "SSEINFO: KMS Decrypt response time (milliseconds): " << end_time.to_msec() << dendl;
+  if (ret < 0)
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    dout(0) << " Unable to obtain encryped and decrypted keys from KMS "<< dendl;
+    return ret; 
+  }
+  
+  string bufferprinter = "";
+  rx_buffer.copy(0, rx_buffer.length(), bufferprinter);
+  dout(0) << "SSEINFO Printing RX buffer: " << bufferprinter << dendl; 
+
+  ret = kmsdata->decode_json_dec(rx_buffer, cct); 
+  if (ret < 0)
+  {
+    ret = -ERR_INTERNAL_ERROR;
+    return ret; 
+  }
+
+  dout(0) << " SSEINFO After parsing " << kmsdata->key_dec << " & " << kmsdata->iv_dec << dendl; 
+  
+  return 0;
 }

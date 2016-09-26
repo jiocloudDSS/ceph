@@ -121,6 +121,7 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
+  RGWKmsData* kmsdata;
   off_t ofs;
   uint64_t total_len;
   off_t start;
@@ -145,7 +146,7 @@ public:
     if_unmod = NULL;
     if_match = NULL;
     if_nomatch = NULL;
-    start = 0;
+    kmsdata = NULL;
     ofs = 0;
     total_len = 0;
     end = -1;
@@ -412,6 +413,7 @@ protected:
   const char *if_match;
   const char *if_nomatch;
   string etag;
+  RGWKmsData* kmsdata;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   const char *obj_manifest;
@@ -428,6 +430,7 @@ public:
     ofs = 0;
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
+    kmsdata = NULL;
     if_match = NULL;
     if_nomatch = NULL;
     chunked_upload = false;
@@ -450,7 +453,7 @@ public:
   void execute();
 
   virtual int get_params() = 0;
-  virtual int get_data(bufferlist& bl) = 0;
+  virtual int get_data(bufferlist& bl,MD5* hash= NULL) = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "put_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_PUT_OBJ; }
@@ -494,7 +497,7 @@ public:
   void dispose_processor(RGWPutObjProcessor *processor);
 
   virtual int get_params() = 0;
-  virtual int get_data(bufferlist& bl) = 0;
+  virtual int get_data(bufferlist& bl,MD5* hash= NULL) = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "post_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_POST_OBJ; }
