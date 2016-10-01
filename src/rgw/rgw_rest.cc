@@ -952,7 +952,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
         return r;
       unsigned char* read_data = reinterpret_cast<unsigned char *>(bp.c_str());
       if (hash && read_len)
-        hash->Update((const byte *)bp.c_str(),read_len);
+        hash->Update((const byte *)bp.c_str(),bp.length());
 
       len = read_len;
       unsigned char* ciphertext = new unsigned char[read_len];
@@ -977,7 +977,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       int read_len; /* cio->read() expects int * */
       int r = s->cio->read(bp.c_str(), cl, &read_len);
       if (hash && read_len)
-        hash->Update((const byte *)bp.c_str(),read_len);
+        hash->Update((const byte *)bp.c_str(),bp.length());
       if (r < 0) {
         return r;
       }
