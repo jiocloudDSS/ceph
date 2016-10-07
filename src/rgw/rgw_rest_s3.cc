@@ -81,14 +81,16 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
   bufferlist metadata_bl, decrypted_bl;
+  if (ret)
+  {
+    dout(0) << "SSEDebug Value of ret at entrance " << ret << " "<<  bl.length() << dendl;
+  } 
   if (kmsdata)
   {
     unsigned char* read_data; 
     int decryptedtext_len,left_data,iter, full_chunks ;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
     unsigned char* decryptedtext = new unsigned char[chunk_size];
-    if (ret)
-      goto done;
 
     const char* c_key = kmsdata->key_dec.c_str();
     const char* c_iv = kmsdata->iv_dec.c_str(); 
@@ -117,20 +119,24 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
       if (decryptedtext_len == -1)
       {
         dout(0) << " Error while decrypting " << dendl;
+        delete [] decryptedtext;
         return -ERR_INTERNAL_ERROR;
       }
       decrypted_bl.append((char*)decryptedtext, left_data);
       string bufferprinter = "";
       decrypted_bl.copy(0, decrypted_bl.length(), bufferprinter);
-      dout(0) << "SSEINFO Decrypted text " << bufferprinter << dendl;
+      //dout(0) << "SSEINFO Decrypted text " << bufferprinter << dendl;
     }
     else if (left_data > 0)
     {
       dout(0) << "SSEINFO Not decrypting tail" << dendl;
       decrypted_bl.append((char*)read_data, left_data);
     }
-    delete decryptedtext;
+    delete [] decryptedtext;
   }
+  dout(0) << "SSEDebug done with enc dec" << dendl;
+  if (ret)
+    goto done;
   if (sent_header)
     goto send_data;
 
@@ -233,7 +239,10 @@ send_data:
     else
       r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
+    {
+      dout(0) << "SSEDebug failing while writing to io" << dendl;
       return r;
+    }
   }
 
   return 0;
