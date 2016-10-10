@@ -193,6 +193,7 @@ struct str_len {
 #define STR_LEN_ENTRY(s) { s, sizeof(s) - 1 }
 
 struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
+                                   STR_LEN_ENTRY("HTTP_X_JCS"),
                                    STR_LEN_ENTRY("HTTP_X_GOOG"),
                                    STR_LEN_ENTRY("HTTP_X_DHO"),
                                    STR_LEN_ENTRY("HTTP_X_RGW"),
@@ -223,7 +224,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
           *found_bad_meta = true;
 
         char name_low[meta_prefixes[0].len + name_len + 1];
-        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
+        snprintf(name_low, meta_prefixes[prefix_num].len - 5 + name_len + 1, "%s%s", meta_prefixes[prefix_num].str + 5 /* skip HTTP_ */, name); // normalize meta prefix but retain the original 'x-*' prefix. We need both amz and jcs type headers for now. 
         int j;
         for (j = 0; name_low[j]; j++) {
           if (name_low[j] != '_')
