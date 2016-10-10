@@ -965,11 +965,12 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl,MD5* hash)
       if (ciphertext_len == -1)
       {
         dout(0) << " Error while encrypting " << dendl;
+        delete [] ciphertext;
         return -ERR_INTERNAL_ERROR;
       }
       dout(0) << "SSEINFO Encryption done " << ciphertext_len  << dendl;
       bl.append((char*)ciphertext, len);
-      delete ciphertext;
+      delete [] ciphertext;
     }
     else
     {
