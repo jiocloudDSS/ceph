@@ -352,6 +352,7 @@ public:
   int validate_request(const string& action,
                        const string& resource_name,
                        const string& tenant_name,
+                       const string& source_ip,
                        const bool&   is_sign_auth,
                        const bool&   is_copy,
                        const bool&   is_cross_account,
