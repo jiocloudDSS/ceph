@@ -1253,10 +1253,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
             }
 	    dout(1) << "DSS API LOGGING: Action="<< resource_info.getAction() <<"        Resource="<< resource_info.getResourceName() << "        Tenant=" << resource_info.getTenantName() << dendl;
 
+            string source_ip = s->info.env->get("HTTP_X_FORWARDED_FOR","0.0.0.0");
+            keystone_validator.append_header("X-Forwarded-For",source_ip);
             if (isTokenBasedAuth) {
                 keystone_result = keystone_validator.validate_request(resource_info.getAction(),
                                                                       resource_info.getResourceName(),
                                                                       resource_info.getTenantName(),
+                                                                      source_ip,
                                                                       false, /* Is sign auth */
                                                                       false, /* Is copy */
                                                                       false, /* Is cross account */
@@ -1274,6 +1277,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
                 keystone_result = keystone_validator.validate_request(resource_info.getAction(),
                                                                       resource_info.getResourceName(),
                                                                       resource_info.getTenantName(),
+                                                                      source_ip,
                                                                       true, /* Is sign auth */
                                                                       false, /* Is copy */
                                                                       false, /* Is cross account */
@@ -2445,6 +2449,7 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 int RGW_Auth_S3_Keystone_ValidateToken::validate_request(const string& action,
                                                          const string& resource_name,
                                                          const string& tenant_name,
+                                                         const string& source_ip,
                                                          const bool&   is_sign_auth,
                                                          const bool&   is_copy,
                                                          const bool&   is_cross_account,
@@ -2479,7 +2484,6 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_request(const string& action,
               << localAction << dendl;
       return -ENOTRECOVERABLE;
   }
-
   /* Set required headers for keystone request
    * Recursive calls already have headers set */
   if (!is_copy && !is_cross_account) {
@@ -2495,6 +2499,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_request(const string& action,
       append_header("Content-Type", "application/json");
   }
 
+  append_header("X-Forwarded-For",source_ip);
   /* Handle special case of copy */
   bool isCopyAction  = false;
   isCopyAction = (localAction.compare("CopyObject") == 0);
@@ -2506,7 +2511,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_request(const string& action,
       string copy_src_str = copy_src.substr(0, pos);
       string copy_src_tenant = copy_src.substr(pos + 1);
       dout(0) << "DSS INFO: Validating for copy source" << dendl;
-      ret = validate_request(localAction, copy_src_str, copy_src_tenant, is_sign_auth,
+      ret = validate_request(localAction, copy_src_str, copy_src_tenant, source_ip, is_sign_auth,
                              true, is_cross_account, is_url_token, is_infini_url_token, copy_src,
                              token, auth_id, auth_token, auth_sign, objectname, iamerror);
       if (ret < 0) {
@@ -2650,7 +2655,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_request(const string& action,
       // This case requires cross account validation.
       // Make recursive call with is_cross_account set to true
       dout(0) << "DSS INFO: Validating for cross account access" << dendl;
-      ret = validate_request(localAction, resource_name, tenant_name,
+      ret = validate_request(localAction, resource_name, tenant_name, source_ip,
                              is_sign_auth, is_copy, true,
                              is_url_token, is_infini_url_token, copy_src, token, auth_id,
                              auth_token, auth_sign, objectname, iamerror);
@@ -2892,16 +2897,17 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       if (s != NULL) {
           resource_object_name = s->object.name;
       }
+      string source_ip = s->info.env->get("HTTP_X_FORWARDED_FOR","0.0.0.0");
       dout(1) << "DSS API LOGGING: Action="
               << resource_info.getAction()
               << "        Resource="<< resource_info.getResourceName()
               << "        Tenant=" << resource_info.getTenantName()
               << "        Object=" << resource_object_name << dendl;
-
       if (isTokenBasedAuth) {
           keystone_result = keystone_validator.validate_request(resource_info.getAction(),
                                                                 resource_info.getResourceName(),
                                                                 resource_info.getTenantName(),
+                                                                source_ip,
                                                                 false, /* Is sign auth */
                                                                 false, /* Is copy */
                                                                 false, /* Is cross account */
@@ -2919,6 +2925,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
           keystone_result = keystone_validator.validate_request(resource_info.getAction(),
                                                                 resource_info.getResourceName(),
                                                                 resource_info.getTenantName(),
+                                                                source_ip,
                                                                 true, /* Is sign auth */
                                                                 false, /* Is copy */
                                                                 false, /* Is cross account */
