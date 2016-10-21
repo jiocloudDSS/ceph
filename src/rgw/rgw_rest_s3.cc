@@ -177,6 +177,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
       }
     }
 
+    if (kmsdata)
+      s->cio->print("x-jcs-server-side-encryption: \"%s\"\r\n", "AES256");
+
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
       string val = s->info.args.get(p->param, &exists);
