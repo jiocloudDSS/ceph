@@ -247,7 +247,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
         }
       }
       if (strncmp(header_name.c_str(), "HTTP_X_JCS_SERVER_SIDE_ENCRYPTION", strlen(header_name.c_str())) == 0) {
-        x_meta_map["x-jcs-server-side-encryption"] = "AES256";
+        x_meta_map["x-jcs-server-side-encryption"] = val;
       }
     }
   }

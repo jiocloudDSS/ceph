@@ -65,6 +65,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_RENAME_COPY_FAILED, 500, "RenameFailed", "Object copy failed during rename. Please file a bug." },
     { ERR_RENAME_DATA_LOST, 500, "DataLost", "Rename operation lost the original data. Please file a bug." },
     { ERR_RENAME_NEW_OBJ_DEL_FAILED, 500, "RenameFailed", "Rename operation failed. Please delete the duplicated object with name same as new name for the object, manually. Please file a bug." },
+    {ERR_INVALID_ENC_ALGO, 400, "InvalidEncryptionAlgorithmError", "The encryption request you specified is not valid. The valid value is AES256." },
 };
 
 const static struct rgw_http_errors RGW_HTTP_SWIFT_ERRORS[] = {
