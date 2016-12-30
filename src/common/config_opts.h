@@ -1082,7 +1082,7 @@ OPTION(rgw_keystone_infinite_url_token_api, OPT_STR, "preauth-token-auth")   // 
 OPTION(dss_regional_url, OPT_STR, "https://dss.ind-west-1.staging.jiocloudservices.com") // URL to be returned in XMLNS during anonymous list all buckets calls
 OPTION(rgw_enable_rename_op, OPT_BOOL, true)                    // Enable the atomic rename op
 
-OPTION(rgw_enable_static_website, OPT_BOOL, false) // enable static website feature
+OPTION(rgw_enable_static_website, OPT_BOOL, true) // enable static website feature
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
