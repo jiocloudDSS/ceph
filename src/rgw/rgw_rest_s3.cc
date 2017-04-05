@@ -2482,8 +2482,9 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_request(const string& action,
   if (is_infini_url_token && !(
         (localAction.compare("ListBucket") == 0) ||
         (localAction.compare("GetObject") == 0)  ||
+        (localAction.compare("PutObject") == 0)  ||
         (localAction.compare("ListAllMyBuckets") == 0) )) {
-      dout(0) << "DSS INFO: Infinite URL only works for GET. Received local action: "
+      dout(0) << "DSS INFO: Infinite URL only works for GET and PUT. Received local action: "
               << localAction << dendl;
       return -ENOTRECOVERABLE;
   }
